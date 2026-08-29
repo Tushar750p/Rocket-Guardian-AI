@@ -15,3 +15,15 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+# Experimental risk-engine versions
+src/risk_engine_v13.py
+src/risk_engine_v15.py
+src/risk_engine_v16.py
+src/risk_engine_v17.py
+src/risk_engine_v18.py
+
+# Generated risk-engine outputs
+data/processed/v15/
+data/processed/v16/
+data/processed/v17/
+data/processed/v18/
