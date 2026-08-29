@@ -15,33 +15,63 @@ st.set_page_config(
 )
 
 
+# ============================================================
+# PATHS
+# ============================================================
+
 DATA_DIR = Path("data/v11")
 RESULT_DIR = Path("data/processed/v11")
+RISK_DIR = Path("data/processed/v14")
 
+
+# ============================================================
+# V14 RISK FILES
+# ============================================================
+
+RISK_FILES = {
+    "Combined Failure": "combined_v14.csv",
+    "Pressure Failure": "pressure_v14.csv",
+    "Temperature Failure": "temperature_v14.csv",
+    "Thrust Failure": "thrust_v14.csv",
+    "Vibration Failure": "vibration_v14.csv",
+}
+
+
+# ============================================================
+# SENSOR CONFIGURATION
+# ============================================================
 
 SENSORS = {
     "Pressure": {
         "column": "pressure_kpa",
         "unit": "kPa",
         "alert_column": "pressure_kpa_alert",
+        "risk_column": "pressure_risk",
     },
     "Temperature": {
         "column": "temperature_k",
         "unit": "K",
         "alert_column": "temperature_k_alert",
+        "risk_column": "temperature_risk",
     },
     "Vibration": {
         "column": "vibration_g",
         "unit": "g",
         "alert_column": "vibration_g_alert",
+        "risk_column": "vibration_risk",
     },
     "Thrust": {
         "column": "thrust_n",
         "unit": "N",
         "alert_column": "thrust_n_alert",
+        "risk_column": "thrust_risk",
     },
 }
 
+
+# ============================================================
+# SCENARIOS
+# ============================================================
 
 SCENARIOS = {
     "Combined Failure": "test_combined_results.csv",
@@ -103,6 +133,13 @@ st.markdown(
         color: #c62828;
     }
 
+    .risk-box {
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid rgba(128,128,128,0.25);
+        margin-bottom: 15px;
+    }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -150,8 +187,11 @@ st.sidebar.markdown(
 )
 
 
-file_path = RESULT_DIR / SCENARIOS[selected]
+# ============================================================
+# LOAD V11 DATA
+# ============================================================
 
+file_path = RESULT_DIR / SCENARIOS[selected]
 
 if not file_path.exists():
 
@@ -163,6 +203,23 @@ if not file_path.exists():
 
 
 data = pd.read_csv(file_path)
+
+
+# ============================================================
+# LOAD V14 RISK DATA
+# ============================================================
+
+risk_file = RISK_DIR / RISK_FILES[selected]
+
+if risk_file.exists():
+
+    risk_data = pd.read_csv(
+        risk_file
+    )
+
+else:
+
+    risk_data = None
 
 
 # ============================================================
@@ -215,10 +272,12 @@ ai_detections = int(
 
 total_samples = len(data)
 
+
 anomaly_start = data.loc[
     data["anomaly"] == 1,
     "time_s",
 ]
+
 
 detection_times = data.loc[
     data["ai_anomaly"] == 1,
@@ -227,6 +286,7 @@ detection_times = data.loc[
 
 
 detection_delay = None
+
 
 if not anomaly_start.empty:
 
@@ -290,16 +350,13 @@ with col4:
 
 st.divider()
 
-
 # ============================================================
-# SENSOR STATUS
+# SENSOR HEALTH
 # ============================================================
 
 st.subheader("Sensor Health")
 
-
 sensor_columns = st.columns(4)
-
 
 for ui_column, (name, config) in zip(
     sensor_columns,
@@ -309,15 +366,11 @@ for ui_column, (name, config) in zip(
     alert_column = config["alert_column"]
 
     if alert_column in data.columns:
-
         alert_active = bool(
-            data[alert_column].any()
+            data[alert_column].astype(bool).any()
         )
-
     else:
-
         alert_active = False
-
 
     with ui_column:
 
@@ -326,9 +379,7 @@ for ui_column, (name, config) in zip(
             st.markdown(
                 f"""
                 <div class="status-card">
-                    <div class="sensor-name">
-                        {name}
-                    </div>
+                    <div class="sensor-name">{name}</div>
                     <div class="sensor-status critical">
                         🔴 ALERT
                     </div>
@@ -342,9 +393,7 @@ for ui_column, (name, config) in zip(
             st.markdown(
                 f"""
                 <div class="status-card">
-                    <div class="sensor-name">
-                        {name}
-                    </div>
+                    <div class="sensor-name">{name}</div>
                     <div class="sensor-status normal">
                         🟢 NORMAL
                     </div>
@@ -353,16 +402,14 @@ for ui_column, (name, config) in zip(
                 unsafe_allow_html=True,
             )
 
-
 st.divider()
 
-
 # ============================================================
-# TELEMETRY CHART FUNCTION
+# TELEMETRY CHART
 # ============================================================
 
 def create_chart(
-    data,
+    chart_data,
     sensor_name,
     config,
 ):
@@ -374,21 +421,28 @@ def create_chart(
     fig = go.Figure()
 
 
-    # Main telemetry line
+    # --------------------------------------------------------
+    # Main telemetry
+    # --------------------------------------------------------
+
     fig.add_trace(
         go.Scatter(
-            x=data["time_s"],
-            y=data[column],
+            x=chart_data["time_s"],
+            y=chart_data[column],
             mode="lines",
             name=sensor_name,
         )
     )
 
 
-    # Actual anomaly points
-    actual = data[
-        data["anomaly"] == 1
+    # --------------------------------------------------------
+    # Actual anomaly
+    # --------------------------------------------------------
+
+    actual = chart_data[
+        chart_data["anomaly"] == 1
     ]
+
 
     if not actual.empty:
 
@@ -405,11 +459,14 @@ def create_chart(
         )
 
 
-    # AI alert points
-    if alert_column in data.columns:
+    # --------------------------------------------------------
+    # AI alert
+    # --------------------------------------------------------
 
-        ai_alerts = data[
-            data[alert_column] == True
+    if alert_column in chart_data.columns:
+
+        ai_alerts = chart_data[
+            chart_data[alert_column] == True
         ]
 
         if not ai_alerts.empty:
@@ -428,20 +485,27 @@ def create_chart(
             )
 
 
-    # Anomaly start line
+    # --------------------------------------------------------
+    # Anomaly start
+    # --------------------------------------------------------
+
     if not actual.empty:
 
-        anomaly_start = actual[
+        anomaly_start_time = actual[
             "time_s"
         ].iloc[0]
 
         fig.add_vline(
-            x=anomaly_start,
+            x=anomaly_start_time,
             line_dash="dash",
             annotation_text="Anomaly Start",
             annotation_position="top",
         )
 
+
+    # --------------------------------------------------------
+    # Layout
+    # --------------------------------------------------------
 
     fig.update_layout(
         title=sensor_name,
@@ -468,7 +532,7 @@ def create_chart(
 
 
 # ============================================================
-# TELEMETRY GRAPHS
+# ROCKET TELEMETRY
 # ============================================================
 
 st.subheader("Rocket Telemetry")
@@ -592,12 +656,13 @@ st.plotly_chart(
 
 
 # ============================================================
-# PHASE TIMELINE
+# FLIGHT PHASE
 # ============================================================
 
 if "phase" in data.columns:
 
     st.subheader("Rocket Flight Phase")
+
 
     phase_map = {
         "startup": 0,
@@ -606,12 +671,14 @@ if "phase" in data.columns:
         "shutdown": 3,
     }
 
+
     phase_values = data[
         "phase"
     ].map(phase_map)
 
 
     fig = go.Figure()
+
 
     fig.add_trace(
         go.Scatter(
@@ -621,6 +688,7 @@ if "phase" in data.columns:
             name="Flight Phase",
         )
     )
+
 
     fig.update_yaxes(
         tickmode="array",
@@ -633,12 +701,14 @@ if "phase" in data.columns:
         ],
     )
 
+
     fig.update_layout(
         title="Flight Phase Timeline",
         xaxis_title="Time (seconds)",
         yaxis_title="Phase",
         height=300,
     )
+
 
     st.plotly_chart(
         fig,
@@ -668,13 +738,15 @@ col1, col2 = st.columns(2)
 
 with col1:
 
+    coverage = (
+        ai_detections / actual_anomalies * 100
+        if actual_anomalies > 0
+        else 0
+    )
+
     st.metric(
         "Detection Coverage",
-        (
-            f"{ai_detections / actual_anomalies * 100:.1f}%"
-            if actual_anomalies > 0
-            else "N/A"
-        ),
+        f"{coverage:.1f}%",
     )
 
 
@@ -694,6 +766,271 @@ with col2:
 
 
 # ============================================================
+# V14 INTELLIGENT RISK ASSESSMENT
+# ============================================================
+
+st.divider()
+
+st.subheader(
+    "🧠 Intelligent Risk Assessment"
+)
+
+
+if risk_data is not None:
+
+    # --------------------------------------------------------
+    # Peak risk row
+    # --------------------------------------------------------
+
+    peak_index = risk_data[
+        "overall_risk"
+    ].idxmax()
+
+    peak_row = risk_data.loc[
+        peak_index
+    ]
+
+
+    overall_risk = float(
+        peak_row["overall_risk"]
+    )
+
+    primary_sensor = (
+        peak_row["primary_risk_sensor"]
+    )
+
+    risk_level = (
+        peak_row["risk_level"]
+    )
+
+    explanation = (
+        peak_row["risk_explanation"]
+    )
+
+
+    # --------------------------------------------------------
+    # Main risk metrics
+    # --------------------------------------------------------
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.metric(
+            "Overall Risk",
+            f"{overall_risk:.1f}/100",
+        )
+
+
+    with col2:
+
+        st.metric(
+            "Primary Risk Sensor",
+            primary_sensor,
+        )
+
+
+    with col3:
+
+        st.metric(
+            "Risk Level",
+            risk_level,
+        )
+
+
+    st.info(
+        f"**Why?** {explanation}"
+    )
+
+
+    # --------------------------------------------------------
+    # Sensor risk
+    # --------------------------------------------------------
+
+    st.markdown("### Sensor Risk")
+
+
+    risk_cols = st.columns(4)
+
+
+    sensor_risks = [
+        (
+            "Pressure",
+            "pressure_risk",
+        ),
+        (
+            "Temperature",
+            "temperature_risk",
+        ),
+        (
+            "Vibration",
+            "vibration_risk",
+        ),
+        (
+            "Thrust",
+            "thrust_risk",
+        ),
+    ]
+
+
+    for column, (
+        name,
+        risk_column,
+    ) in zip(
+        risk_cols,
+        sensor_risks,
+    ):
+
+        with column:
+
+            value = float(
+                risk_data[
+                    risk_column
+                ].max()
+            )
+
+            st.metric(
+                name,
+                f"{value:.1f}/100",
+            )
+
+
+    # --------------------------------------------------------
+    # Risk over time
+    # --------------------------------------------------------
+
+    st.markdown("### Risk Over Time")
+
+
+    fig = go.Figure()
+
+
+    fig.add_trace(
+        go.Scatter(
+            x=risk_data["time_s"],
+            y=risk_data["overall_risk"],
+            mode="lines",
+            name="Overall Risk",
+        )
+    )
+
+
+    # Warning threshold
+    fig.add_hline(
+        y=45,
+        line_dash="dash",
+        annotation_text="Warning",
+        annotation_position="top left",
+    )
+
+
+    # Critical threshold
+    fig.add_hline(
+        y=75,
+        line_dash="dash",
+        annotation_text="Critical",
+        annotation_position="top left",
+    )
+
+
+    # Actual anomalies
+    if "anomaly" in risk_data.columns:
+
+        anomaly_data = risk_data[
+            risk_data["anomaly"] == 1
+        ]
+
+
+        if not anomaly_data.empty:
+
+            fig.add_trace(
+                go.Scatter(
+                    x=anomaly_data["time_s"],
+                    y=anomaly_data["overall_risk"],
+                    mode="markers",
+                    name="Actual Anomaly",
+                    marker=dict(
+                        size=5,
+                        symbol="circle",
+                    ),
+                )
+            )
+
+
+    fig.update_layout(
+        title="Overall Risk Progression",
+        xaxis_title="Time (seconds)",
+        yaxis_title="Risk Score",
+        yaxis=dict(
+            range=[0, 105]
+        ),
+        height=400,
+        hovermode="x unified",
+        margin=dict(
+            l=20,
+            r=20,
+            t=50,
+            b=20,
+        ),
+    )
+
+
+    st.plotly_chart(
+        fig,
+        width="stretch",
+    )
+
+
+    # --------------------------------------------------------
+    # Peak risk details
+    # --------------------------------------------------------
+
+    st.markdown("### Peak Risk Event")
+
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.metric(
+            "Peak Time",
+            f"{peak_row['time_s']:.1f} s",
+        )
+
+
+    with col2:
+
+        st.metric(
+            "Primary Sensor",
+            primary_sensor,
+        )
+
+
+    with col3:
+
+        elevated = int(
+            peak_row[
+                "elevated_sensor_count"
+            ]
+        )
+
+        st.metric(
+            "Elevated Sensors",
+            elevated,
+        )
+
+
+else:
+
+    st.warning(
+        "V14 risk results are not available. "
+        "Run risk_engine_v14.py first."
+    )
+
+
+# ============================================================
 # RAW DATA
 # ============================================================
 
@@ -707,6 +1044,10 @@ with st.expander(
         height=400,
     )
 
+
+# ============================================================
+# FOOTER
+# ============================================================
 
 st.caption(
     "Rocket Guardian AI — Research Prototype | "
