@@ -3,7 +3,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
 import os
+import sys
 import tempfile
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from src.telemetry_analysis import analyze_telemetry
 from src.risk_analysis import analyze_risk, summarize_risk
