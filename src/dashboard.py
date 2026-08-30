@@ -7,6 +7,10 @@ import tempfile
 
 from src.telemetry_analysis import analyze_telemetry
 from src.risk_analysis import analyze_risk, summarize_risk
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.enums import TA_CENTER
 
 
 # ============================================================
@@ -96,34 +100,37 @@ st.markdown(
     <style>
 
     .main-title {
-        font-size: 42px;
-        font-weight: 700;
-        margin-bottom: 0;
+        font-size: 44px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        margin-bottom: 2px;
     }
 
     .subtitle {
-        font-size: 17px;
-        opacity: 0.7;
-        margin-bottom: 25px;
+        font-size: 16px;
+        opacity: 0.65;
+        margin-bottom: 28px;
     }
 
     .status-card {
-        padding: 18px;
-        border-radius: 12px;
-        border: 1px solid rgba(128,128,128,0.25);
+        padding: 20px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(128,128,128,0.22);
+        background: rgba(128,128,128,0.04);
         text-align: center;
         margin-bottom: 15px;
     }
 
     .sensor-name {
         font-size: 15px;
-        font-weight: 600;
+        font-weight: 700;
+        letter-spacing: 0.2px;
     }
 
     .sensor-status {
-        font-size: 22px;
-        font-weight: 700;
-        margin-top: 6px;
+        font-size: 20px;
+        font-weight: 750;
+        margin-top: 8px;
     }
 
     .normal {
@@ -139,10 +146,11 @@ st.markdown(
     }
 
     .risk-box {
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid rgba(128,128,128,0.25);
-        margin-bottom: 15px;
+        padding: 22px;
+        border-radius: 14px;
+        border: 1px solid rgba(128,128,128,0.22);
+        background: rgba(128,128,128,0.04);
+        margin-bottom: 18px;
     }
 
     </style>
@@ -151,18 +159,19 @@ st.markdown(
 )
 
 
+
 # ============================================================
 # HEADER
 # ============================================================
 
 st.markdown(
-    '<div class="main-title">Rocket Guardian AI</div>',
+    '<div class="main-title">🚀 Rocket Guardian AI</div>',
     unsafe_allow_html=True,
 )
 
 st.markdown(
     '<div class="subtitle">'
-    "Phase-Aware Rocket Telemetry Monitoring Prototype"
+    "AI-Powered Rocket Telemetry Risk Monitoring"
     "</div>",
     unsafe_allow_html=True,
 )
@@ -173,39 +182,74 @@ st.markdown(
 
 st.sidebar.header("Mission Controls")
 
-selected = st.sidebar.selectbox(
-    "Test Scenario",
-    list(SCENARIOS.keys()),
+analysis_mode = st.sidebar.radio(
+    "Analysis Mode",
+    [
+        "Demo Mission",
+        "Customer Upload",
+    ],
 )
 
 st.sidebar.divider()
 
-st.sidebar.subheader("Telemetry Input")
 
-uploaded_file = st.sidebar.file_uploader(
-    "Upload Telemetry CSV",
-    type=["csv"],
-    help=(
-        "Upload a telemetry CSV containing time_s, phase, "
-        "pressure_kpa, temperature_k, vibration_g, and thrust_n."
-    ),
-)
+# ============================================================
+# DEMO MODE
+# ============================================================
+
+if analysis_mode == "Demo Mission":
+
+    st.sidebar.subheader("Demo Mission")
+
+    selected = st.sidebar.selectbox(
+        "Test Scenario",
+        list(SCENARIOS.keys()),
+    )
+
+    uploaded_file = None
+
+
+# ============================================================
+# CUSTOMER UPLOAD MODE
+# ============================================================
+
+else:
+
+    st.sidebar.subheader("Telemetry Input")
+
+    uploaded_file = st.sidebar.file_uploader(
+        "Upload Telemetry CSV",
+        type=["csv"],
+        help=(
+            "Upload a telemetry CSV containing "
+            "time_s, phase, pressure_kpa, "
+            "temperature_k, vibration_g, "
+            "and thrust_n."
+        ),
+    )
+
+    selected = "Combined Failure"
+
+
+st.sidebar.divider()
 
 st.sidebar.markdown(
     """
     **Monitoring System**
 
-    NORMAL — Normal  
-    WARNING — Warning  
-    CRITICAL — Critical
+    NORMAL - Normal
+
+    WARNING - Warning
+
+    CRITICAL - Critical
     """
 )
+
 
 # ============================================================
 # LOAD TELEMETRY DATA
 # ============================================================
-
-customer_mode = uploaded_file is not None
+customer_mode = analysis_mode == "Customer Upload"
 
 if customer_mode:
 
@@ -345,35 +389,60 @@ else:
 # OVERALL SYSTEM STATUS
 # ============================================================
 
-severity = {
-    "NORMAL": 0,
-    "WARNING": 1,
-    "CRITICAL": 2,
-}
+if risk_data is not None and "overall_risk" in risk_data.columns:
 
+    peak_overall_risk = float(
+        risk_data["overall_risk"].max()
+    )
 
-highest_status = max(
-    data["status"],
-    key=lambda x: severity.get(x, 0),
-)
+    if peak_overall_risk >= 75:
 
+        highest_status = "CRITICAL"
+
+    elif peak_overall_risk >= 45:
+
+        highest_status = "WARNING"
+
+    else:
+
+        highest_status = "NORMAL"
+
+else:
+
+    severity = {
+        "NORMAL": 0,
+        "WARNING": 1,
+        "CRITICAL": 2,
+    }
+
+    highest_status = max(
+        data["status"],
+        key=lambda x: severity.get(x, 0),
+    )
+
+# ============================================================
+# MISSION STATUS
+# ============================================================
 
 if highest_status == "CRITICAL":
 
     st.error(
-        "[CRITICAL] CRITICAL - Significant telemetry anomaly detected"
+        "🔴 MISSION STATUS: CRITICAL\n\n"
+        "Significant telemetry anomaly detected."
     )
 
 elif highest_status == "WARNING":
 
     st.warning(
-        "[WARNING] WARNING - Potential telemetry anomaly detected"
+        "🟡 MISSION STATUS: WARNING\n\n"
+        "Potential telemetry anomaly detected."
     )
 
 else:
 
     st.success(
-        "[NORMAL] NORMAL - Telemetry within expected operating envelope"
+        "🟢 MISSION STATUS: NORMAL\n\n"
+        "Telemetry within the expected operating envelope."
     )
 
 
@@ -381,8 +450,6 @@ else:
 # CORE METRICS
 # ============================================================
 
-customer_mode = "anomaly" not in data.columns
-
 ai_detections = int(
     data["ai_anomaly"].sum()
 )
@@ -390,52 +457,53 @@ ai_detections = int(
 total_samples = len(data)
 
 actual_anomalies = None
-anomaly_start = pd.Series(dtype=float)
 detection_delay = None
 start_time = None
 
-ai_detections = int(
-    data["ai_anomaly"].sum()
-)
 
-total_samples = len(data)
-
-actual_anomalies = None
-anomaly_start = pd.Series(dtype=float)
-detection_delay = None
-start_time = None
+# ------------------------------------------------------------
+# Research / Demo telemetry with ground-truth labels
+# ------------------------------------------------------------
 
 if not customer_mode:
 
-    actual_anomalies = int(
-        data["anomaly"].sum()
-    )
+    if "anomaly" in data.columns:
 
-    anomaly_start = data.loc[
-        data["anomaly"] == 1,
-        "time_s",
-    ]
+        actual_anomalies = int(
+            data["anomaly"].sum()
+        )
 
-    detection_times = data.loc[
-        data["ai_anomaly"] == 1,
-        "time_s",
-    ]
-
-    if not anomaly_start.empty:
-
-        start_time = anomaly_start.iloc[0]
-
-        valid_detection = detection_times[
-            detection_times >= start_time
+        anomaly_times = data.loc[
+            data["anomaly"] == 1,
+            "time_s",
         ]
 
-        if not valid_detection.empty:
+        detection_times = data.loc[
+            data["ai_anomaly"] == 1,
+            "time_s",
+        ]
 
-            detection_delay = (
-                valid_detection.iloc[0]
-                - start_time
-            )
+        if not anomaly_times.empty:
 
+            start_time = anomaly_times.iloc[0]
+
+            valid_detection = detection_times[
+                detection_times >= start_time
+            ]
+
+            if not valid_detection.empty:
+
+                detection_delay = (
+                    valid_detection.iloc[0]
+                    - start_time
+                )
+
+
+# ============================================================
+# MISSION OVERVIEW
+# ============================================================
+
+st.subheader("Mission Overview")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -506,7 +574,9 @@ for ui_column, (name, config) in zip(
 ):
 
     alert_column = config["alert_column"]
+    risk_column = config["risk_column"]
 
+    # Check alert state
     if alert_column in data.columns:
         alert_active = bool(
             data[alert_column].astype(bool).any()
@@ -514,35 +584,32 @@ for ui_column, (name, config) in zip(
     else:
         alert_active = False
 
+    # Get maximum sensor risk
+    sensor_risk = None
+
+    if (
+        risk_data is not None
+        and risk_column in risk_data.columns
+    ):
+        sensor_risk = float(
+            risk_data[risk_column].max()
+        )
+
     with ui_column:
 
+        st.markdown(f"### {name}")
+
         if alert_active:
-
-            st.markdown(
-                f"""
-                <div class="status-card">
-                    <div class="sensor-name">{name}</div>
-                    <div class="sensor-status critical">
-                        ALERT
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
+            st.error("ALERT")
         else:
+            st.success("NORMAL")
 
-            st.markdown(
-                f"""
-                <div class="status-card">
-                    <div class="sensor-name">{name}</div>
-                    <div class="sensor-status normal">
-                        [NORMAL] NORMAL
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+        if sensor_risk is not None:
+            st.metric(
+                "Risk",
+                f"{sensor_risk:.1f}/100",
             )
+
 
 st.divider()
 
@@ -1153,6 +1220,244 @@ else:
         "Run risk_engine_v14.py first."
     )
 
+# ============================================================
+# CUSTOMER ANALYSIS REPORT
+# ============================================================
+
+if customer_mode and risk_data is not None:
+
+    st.divider()
+
+    st.subheader("Customer Analysis Report")
+
+    report_lines = []
+
+    report_lines.append(
+        "ROCKET GUARDIAN AI - TELEMETRY ANALYSIS REPORT"
+    )
+    report_lines.append(
+        "=" * 55
+    )
+    report_lines.append("")
+
+    report_lines.append("MISSION SUMMARY")
+    report_lines.append("-" * 30)
+    report_lines.append(
+        f"Telemetry Samples: {total_samples}"
+    )
+    report_lines.append(
+        f"AI Detections: {ai_detections}"
+    )
+    report_lines.append(
+        f"System Status: {highest_status}"
+    )
+    report_lines.append("")
+
+    report_lines.append("RISK ASSESSMENT")
+    report_lines.append("-" * 30)
+    report_lines.append(
+        f"Overall Risk: {overall_risk:.1f}/100"
+    )
+    report_lines.append(
+        f"Risk Level: {risk_level}"
+    )
+    report_lines.append(
+        f"Primary Risk Sensor: {primary_sensor}"
+    )
+    report_lines.append(
+        f"Elevated Sensors: {int(peak_row['elevated_sensor_count'])}"
+    )
+    report_lines.append("")
+
+    report_lines.append("SENSOR RISK")
+    report_lines.append("-" * 30)
+    report_lines.append(
+        f"Pressure: {float(risk_data['pressure_risk'].max()):.1f}/100"
+    )
+    report_lines.append(
+        f"Temperature: {float(risk_data['temperature_risk'].max()):.1f}/100"
+    )
+    report_lines.append(
+        f"Vibration: {float(risk_data['vibration_risk'].max()):.1f}/100"
+    )
+    report_lines.append(
+        f"Thrust: {float(risk_data['thrust_risk'].max()):.1f}/100"
+    )
+    report_lines.append("")
+
+    report_lines.append("PEAK RISK EVENT")
+    report_lines.append("-" * 30)
+    report_lines.append(
+        f"Peak Time: {float(peak_row['time_s']):.1f} s"
+    )
+    report_lines.append(
+        f"Primary Sensor: {primary_sensor}"
+    )
+    report_lines.append(
+        f"Elevated Sensors: {int(peak_row['elevated_sensor_count'])}"
+    )
+    report_lines.append("")
+
+    report_lines.append("EXPLANATION")
+    report_lines.append("-" * 30)
+    report_lines.append(
+        str(explanation)
+    )
+    report_lines.append("")
+
+    report_lines.append(
+        "Ground-truth anomaly labels were not provided "
+        "with this telemetry file."
+    )
+    report_lines.append(
+        "AI detections are based on the learned "
+        "phase-aware telemetry baseline."
+    )
+    report_lines.append("")
+
+    report_lines.append(
+        "Rocket Guardian AI - Research Prototype"
+    )
+    report_lines.append(
+        "Synthetic telemetry / customer-provided telemetry"
+    )
+    report_lines.append(
+        "Not for flight-critical use"
+    )
+
+    report_text = "\n".join(
+        report_lines
+    )
+    # --------------------------------------------------------
+    # Generate PDF analysis report
+    # --------------------------------------------------------
+
+    pdf_buffer = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".pdf",
+    )
+
+    pdf_path = pdf_buffer.name
+
+    pdf_buffer.close()
+
+    try:
+
+        styles = getSampleStyleSheet()
+
+        title_style = styles["Title"]
+        title_style.alignment = TA_CENTER
+
+        normal_style = styles["BodyText"]
+
+        doc = SimpleDocTemplate(
+            pdf_path,
+            pagesize=A4,
+            rightMargin=40,
+            leftMargin=40,
+            topMargin=40,
+            bottomMargin=40,
+        )
+
+        story = []
+
+        story.append(
+            Paragraph(
+                "Rocket Guardian AI",
+                title_style,
+            )
+        )
+
+        story.append(
+            Spacer(1, 12)
+        )
+
+        story.append(
+            Paragraph(
+                "Telemetry Analysis Report",
+                styles["Heading2"],
+            )
+        )
+
+        story.append(
+            Spacer(1, 15)
+        )
+
+        for line in report_lines:
+
+            if not line.strip():
+                story.append(
+                    Spacer(1, 8)
+                )
+
+            elif set(line.strip()) == {"="}:
+                continue
+
+            elif set(line.strip()) == {"-"}:
+                continue
+
+            else:
+                story.append(
+                    Paragraph(
+                        line.replace(
+                            "&",
+                            "&amp;",
+                        ),
+                        normal_style,
+                    )
+                )
+
+        doc.build(story)
+
+        with open(
+            pdf_path,
+            "rb",
+        ) as pdf_file:
+
+            pdf_data = pdf_file.read()
+
+        st.download_button(
+            label="Download PDF Report",
+            data=pdf_data,
+            file_name="rocket_guardian_analysis_report.pdf",
+            mime="application/pdf",
+        )
+
+    finally:
+
+        if os.path.exists(pdf_path):
+
+            os.remove(pdf_path)
+
+
+    # --------------------------------------------------------
+    # Download processed AI telemetry
+    # --------------------------------------------------------
+
+    processed_csv = risk_data.to_csv(
+        index=False
+    )
+
+    st.download_button(
+        label="Download Processed Telemetry CSV",
+        data=processed_csv,
+        file_name="rocket_guardian_analysis.csv",
+        mime="text/csv",
+    )
+
+
+    st.text_area(
+        "Report Preview",
+        report_text,
+        height=420,
+    )
+
+    st.download_button(
+        label="Download Analysis Report",
+        data=report_text,
+        file_name="rocket_guardian_analysis_report.txt",
+        mime="text/plain",
+    )
 
 # ============================================================
 # RAW DATA
