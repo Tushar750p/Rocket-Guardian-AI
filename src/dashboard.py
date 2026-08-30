@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
+import os
+import tempfile
+
+from src.telemetry_analysis import analyze_telemetry
+from src.risk_analysis import analyze_risk, summarize_risk
 
 
 # ============================================================
@@ -10,7 +15,7 @@ from pathlib import Path
 
 st.set_page_config(
     page_title="Rocket Guardian AI",
-    page_icon="🚀",
+    page_icon="[ROCKET]",
     layout="wide",
 )
 
@@ -151,7 +156,7 @@ st.markdown(
 # ============================================================
 
 st.markdown(
-    '<div class="main-title">🚀 Rocket Guardian AI</div>',
+    '<div class="main-title">Rocket Guardian AI</div>',
     unsafe_allow_html=True,
 )
 
@@ -161,7 +166,6 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True,
 )
-
 
 # ============================================================
 # SIDEBAR
@@ -176,50 +180,165 @@ selected = st.sidebar.selectbox(
 
 st.sidebar.divider()
 
+st.sidebar.subheader("Telemetry Input")
+
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Telemetry CSV",
+    type=["csv"],
+    help=(
+        "Upload a telemetry CSV containing time_s, phase, "
+        "pressure_kpa, temperature_k, vibration_g, and thrust_n."
+    ),
+)
+
 st.sidebar.markdown(
     """
     **Monitoring System**
 
-    🟢 Normal  
-    🟡 Warning  
-    🔴 Critical
+    NORMAL — Normal  
+    WARNING — Warning  
+    CRITICAL — Critical
     """
 )
 
-
 # ============================================================
-# LOAD V11 DATA
+# LOAD TELEMETRY DATA
 # ============================================================
 
-file_path = RESULT_DIR / SCENARIOS[selected]
+customer_mode = uploaded_file is not None
 
-if not file_path.exists():
+if customer_mode:
 
-    st.error(
-        f"Result file not found:\n{file_path}"
+    try:
+
+        uploaded_bytes = uploaded_file.getvalue()
+
+        required_columns = [
+            "time_s",
+            "phase",
+            "pressure_kpa",
+            "temperature_k",
+            "vibration_g",
+            "thrust_n",
+        ]
+
+        preview = pd.read_csv(
+            pd.io.common.BytesIO(uploaded_bytes)
+        )
+
+        missing_columns = [
+            column
+            for column in required_columns
+            if column not in preview.columns
+        ]
+
+        if missing_columns:
+
+            st.error(
+                "Invalid telemetry CSV. Missing columns: "
+                + ", ".join(missing_columns)
+            )
+
+            st.stop()
+
+        fd, temp_path = tempfile.mkstemp(
+            suffix=".csv"
+        )
+
+        try:
+
+            with os.fdopen(fd, "wb") as temp_file:
+
+                temp_file.write(
+                    uploaded_bytes
+                )
+
+            data = analyze_telemetry(
+                temp_path
+            )
+
+        finally:
+
+            if os.path.exists(temp_path):
+
+                os.remove(temp_path)
+
+        st.sidebar.success(
+            "Telemetry analyzed successfully."
+        )
+
+    except ValueError as exc:
+
+        st.error(
+            f"Telemetry validation failed: {exc}"
+        )
+
+        st.stop()
+
+    except Exception as exc:
+
+        st.error(
+            f"Telemetry analysis failed: {exc}"
+        )
+
+        st.stop()
+
+else:
+
+    file_path = (
+        RESULT_DIR
+        / SCENARIOS[selected]
     )
 
-    st.stop()
+    if not file_path.exists():
 
+        st.error(
+            f"Result file not found:\n{file_path}"
+        )
 
-data = pd.read_csv(file_path)
+        st.stop()
+
+    data = pd.read_csv(
+        file_path
+    )
 
 
 # ============================================================
 # LOAD V14 RISK DATA
 # ============================================================
 
-risk_file = RISK_DIR / RISK_FILES[selected]
+if customer_mode:
 
-if risk_file.exists():
+    try:
 
-    risk_data = pd.read_csv(
-        risk_file
-    )
+        risk_data = analyze_risk(
+            data
+        )
+
+    except ValueError as exc:
+
+        st.error(
+            f"Risk analysis failed: {exc}"
+        )
+
+        st.stop()
 
 else:
 
-    risk_data = None
+    risk_file = (
+        RISK_DIR
+        / RISK_FILES[selected]
+    )
+
+    if risk_file.exists():
+
+        risk_data = pd.read_csv(
+            risk_file
+        )
+
+    else:
+
+        risk_data = None
 
 
 # ============================================================
@@ -242,19 +361,19 @@ highest_status = max(
 if highest_status == "CRITICAL":
 
     st.error(
-        "🔴 CRITICAL — Significant telemetry anomaly detected"
+        "[CRITICAL] CRITICAL - Significant telemetry anomaly detected"
     )
 
 elif highest_status == "WARNING":
 
     st.warning(
-        "🟡 WARNING — Potential telemetry anomaly detected"
+        "[WARNING] WARNING - Potential telemetry anomaly detected"
     )
 
 else:
 
     st.success(
-        "🟢 NORMAL — Telemetry within expected operating envelope"
+        "[NORMAL] NORMAL - Telemetry within expected operating envelope"
     )
 
 
@@ -262,9 +381,7 @@ else:
 # CORE METRICS
 # ============================================================
 
-actual_anomalies = int(
-    data["anomaly"].sum()
-)
+customer_mode = "anomaly" not in data.columns
 
 ai_detections = int(
     data["ai_anomaly"].sum()
@@ -272,36 +389,52 @@ ai_detections = int(
 
 total_samples = len(data)
 
-
-anomaly_start = data.loc[
-    data["anomaly"] == 1,
-    "time_s",
-]
-
-
-detection_times = data.loc[
-    data["ai_anomaly"] == 1,
-    "time_s",
-]
-
-
+actual_anomalies = None
+anomaly_start = pd.Series(dtype=float)
 detection_delay = None
+start_time = None
 
+ai_detections = int(
+    data["ai_anomaly"].sum()
+)
 
-if not anomaly_start.empty:
+total_samples = len(data)
 
-    start_time = anomaly_start.iloc[0]
+actual_anomalies = None
+anomaly_start = pd.Series(dtype=float)
+detection_delay = None
+start_time = None
 
-    valid_detection = detection_times[
-        detection_times >= start_time
+if not customer_mode:
+
+    actual_anomalies = int(
+        data["anomaly"].sum()
+    )
+
+    anomaly_start = data.loc[
+        data["anomaly"] == 1,
+        "time_s",
     ]
 
-    if not valid_detection.empty:
+    detection_times = data.loc[
+        data["ai_anomaly"] == 1,
+        "time_s",
+    ]
 
-        detection_delay = (
-            valid_detection.iloc[0]
-            - start_time
-        )
+    if not anomaly_start.empty:
+
+        start_time = anomaly_start.iloc[0]
+
+        valid_detection = detection_times[
+            detection_times >= start_time
+        ]
+
+        if not valid_detection.empty:
+
+            detection_delay = (
+                valid_detection.iloc[0]
+                - start_time
+            )
 
 
 col1, col2, col3, col4 = st.columns(4)
@@ -309,10 +442,19 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
 
-    st.metric(
-        "Actual Anomalies",
-        actual_anomalies,
-    )
+    if customer_mode:
+
+        st.metric(
+            "Actual Anomalies",
+            "N/A",
+        )
+
+    else:
+
+        st.metric(
+            "Actual Anomalies",
+            actual_anomalies,
+        )
 
 
 with col2:
@@ -381,7 +523,7 @@ for ui_column, (name, config) in zip(
                 <div class="status-card">
                     <div class="sensor-name">{name}</div>
                     <div class="sensor-status critical">
-                        🔴 ALERT
+                        ALERT
                     </div>
                 </div>
                 """,
@@ -395,7 +537,7 @@ for ui_column, (name, config) in zip(
                 <div class="status-card">
                     <div class="sensor-name">{name}</div>
                     <div class="sensor-status normal">
-                        🟢 NORMAL
+                        [NORMAL] NORMAL
                     </div>
                 </div>
                 """,
@@ -420,11 +562,7 @@ def create_chart(
 
     fig = go.Figure()
 
-
-    # --------------------------------------------------------
     # Main telemetry
-    # --------------------------------------------------------
-
     fig.add_trace(
         go.Scatter(
             x=chart_data["time_s"],
@@ -434,43 +572,32 @@ def create_chart(
         )
     )
 
-
-    # --------------------------------------------------------
-    # Actual anomaly
-    # --------------------------------------------------------
-
-    actual = chart_data[
-        chart_data["anomaly"] == 1
-    ]
-
+    # Actual anomaly — available only in research/test data
+    if "anomaly" in chart_data.columns:
+        actual = chart_data[
+            chart_data["anomaly"] == 1
+        ]
+    else:
+        actual = pd.DataFrame(columns=chart_data.columns)
 
     if not actual.empty:
-
         fig.add_trace(
             go.Scatter(
                 x=actual["time_s"],
                 y=actual[column],
                 mode="markers",
                 name="Actual Anomaly",
-                marker=dict(
-                    size=5,
-                ),
+                marker=dict(size=5),
             )
         )
 
-
-    # --------------------------------------------------------
     # AI alert
-    # --------------------------------------------------------
-
     if alert_column in chart_data.columns:
-
         ai_alerts = chart_data[
             chart_data[alert_column] == True
         ]
 
         if not ai_alerts.empty:
-
             fig.add_trace(
                 go.Scatter(
                     x=ai_alerts["time_s"],
@@ -484,13 +611,8 @@ def create_chart(
                 )
             )
 
-
-    # --------------------------------------------------------
-    # Anomaly start
-    # --------------------------------------------------------
-
+    # Anomaly start — research/test data only
     if not actual.empty:
-
         anomaly_start_time = actual[
             "time_s"
         ].iloc[0]
@@ -501,11 +623,6 @@ def create_chart(
             annotation_text="Anomaly Start",
             annotation_position="top",
         )
-
-
-    # --------------------------------------------------------
-    # Layout
-    # --------------------------------------------------------
 
     fig.update_layout(
         title=sensor_name,
@@ -738,16 +855,25 @@ col1, col2 = st.columns(2)
 
 with col1:
 
-    coverage = (
-        ai_detections / actual_anomalies * 100
-        if actual_anomalies > 0
-        else 0
-    )
+    if customer_mode:
 
-    st.metric(
-        "Detection Coverage",
-        f"{coverage:.1f}%",
-    )
+        st.metric(
+            "Detection Coverage",
+            "N/A",
+        )
+
+    else:
+
+        coverage = (
+            ai_detections / actual_anomalies * 100
+            if actual_anomalies > 0
+            else 0
+        )
+
+        st.metric(
+            "Detection Coverage",
+            f"{coverage:.1f}%",
+        )
 
 
 with col2:
@@ -772,10 +898,8 @@ with col2:
 st.divider()
 
 st.subheader(
-    "🧠 Intelligent Risk Assessment"
+    "Intelligent Risk Assessment"
 )
-
-
 if risk_data is not None:
 
     # --------------------------------------------------------
@@ -1050,6 +1174,6 @@ with st.expander(
 # ============================================================
 
 st.caption(
-    "Rocket Guardian AI — Research Prototype | "
+    "Rocket Guardian AI - Research Prototype | "
     "Synthetic telemetry data | Not for flight-critical use"
 )
