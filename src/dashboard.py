@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
@@ -179,7 +179,7 @@ st.markdown(
 # ============================================================
 
 st.markdown(
-    '<div class="main-title">🚀 Rocket Guardian AI</div>',
+    '<div class="main-title">Rocket Guardian AI</div>',
     unsafe_allow_html=True,
 )
 
@@ -222,12 +222,28 @@ if analysis_mode == "Demo Mission":
 
     uploaded_file = None
 
-
 # ============================================================
 # CUSTOMER UPLOAD MODE
 # ============================================================
 
 else:
+
+    st.sidebar.subheader("Customer Information")
+
+    customer_name = st.sidebar.text_input(
+        "Customer Name",
+        placeholder="Enter customer name",
+    )
+
+    customer_email = st.sidebar.text_input(
+        "Customer Email",
+        placeholder="customer@example.com",
+    )
+
+    mission_name = st.sidebar.text_input(
+        "Mission Name",
+        placeholder="Enter mission name",
+    )
 
     st.sidebar.subheader("Telemetry Input")
 
@@ -243,6 +259,7 @@ else:
     )
 
     selected = "Combined Failure"
+
 
 
 st.sidebar.divider()
@@ -266,6 +283,38 @@ st.sidebar.markdown(
 customer_mode = analysis_mode == "Customer Upload"
 
 if customer_mode:
+
+    if uploaded_file is None:
+
+        st.info(
+            "Please upload a telemetry CSV to begin analysis."
+        )
+
+        st.stop()
+
+    if not customer_name.strip():
+
+        st.error(
+            "Please enter Customer Name."
+        )
+
+        st.stop()
+
+    if not customer_email.strip():
+
+        st.error(
+            "Please enter Customer Email."
+        )
+
+        st.stop()
+
+    if not mission_name.strip():
+
+        st.error(
+            "Please enter Mission Name."
+        )
+
+        st.stop()
 
     try:
 
@@ -377,7 +426,7 @@ if customer_mode:
         # Save customer analysis to database
         # ----------------------------------------------------
 
-        customer_email = "demo@rocketguardian.local"
+        
         source_filename = uploaded_file.name
 
         connection = get_connection()
@@ -411,7 +460,7 @@ if customer_mode:
 
                 customer_id = int(
                     create_customer(
-                        "Demo Customer",
+                        customer_name,
                         customer_email,
                     )
                 )
@@ -466,10 +515,7 @@ if customer_mode:
 
             mission_id = create_mission(
                 customer_id=customer_id,
-                name=(
-                    f"Telemetry Analysis - "
-                    f"{source_filename}"
-                ),
+               name=mission_name,
                 description=(
                     "Customer telemetry analysis run."
                 ),
@@ -602,21 +648,21 @@ else:
 if highest_status == "CRITICAL":
 
     st.error(
-        "🔴 MISSION STATUS: CRITICAL\n\n"
+        "MISSION STATUS: CRITICAL\n\n"
         "Significant telemetry anomaly detected."
     )
 
 elif highest_status == "WARNING":
 
     st.warning(
-        "🟡 MISSION STATUS: WARNING\n\n"
+        "MISSION STATUS: WARNING\n\n"
         "Potential telemetry anomaly detected."
     )
 
 else:
 
     st.success(
-        "🟢 MISSION STATUS: NORMAL\n\n"
+        "MISSION STATUS: NORMAL\n\n"
         "Telemetry within the expected operating envelope."
     )
 
@@ -814,7 +860,7 @@ def create_chart(
         )
     )
 
-    # Actual anomaly — available only in research/test data
+    # Actual anomaly â€” available only in research/test data
     if "anomaly" in chart_data.columns:
         actual = chart_data[
             chart_data["anomaly"] == 1
@@ -853,7 +899,7 @@ def create_chart(
                 )
             )
 
-    # Anomaly start — research/test data only
+    # Anomaly start â€” research/test data only
     if not actual.empty:
         anomaly_start_time = actual[
             "time_s"
