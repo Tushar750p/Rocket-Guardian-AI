@@ -458,5 +458,118 @@ def list_telemetry_runs(
 # ============================================================
 # INITIALIZE DATABASE
 # ============================================================
+# ============================================================
+# FIND OR CREATE CUSTOMER
+# ============================================================
+
+def get_or_create_customer(
+    name,
+    email,
+):
+    """
+    Return an existing customer ID by email,
+    or create a new customer.
+    """
+
+    name = str(name).strip()
+    email = str(email).strip().lower()
+
+    connection = get_connection()
+
+    try:
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT id
+            FROM customers
+            WHERE email = ?
+            """,
+            (
+                email,
+            ),
+        )
+
+        row = cursor.fetchone()
+
+        if row is not None:
+
+            return int(
+                row["id"]
+            )
+
+        cursor.execute(
+            """
+            INSERT INTO customers (
+                name,
+                email
+            )
+            VALUES (?, ?)
+            """,
+            (
+                name,
+                email,
+            ),
+        )
+
+        connection.commit()
+
+        return int(
+            cursor.lastrowid
+        )
+
+    finally:
+
+        connection.close()
+
+
+# ============================================================
+# FIND TELEMETRY RUN
+# ============================================================
+
+def find_telemetry_run(
+    source_filename,
+    customer_id,
+    mission_name,
+):
+    """
+    Find an existing telemetry run for a customer,
+    mission, and source filename.
+    """
+
+    connection = get_connection()
+
+    try:
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT
+                tr.id
+            FROM telemetry_runs tr
+            JOIN missions m
+                ON tr.mission_id = m.id
+            WHERE tr.source_filename = ?
+            AND m.customer_id = ?
+            AND m.name = ?
+            ORDER BY tr.id DESC
+            LIMIT 1
+            """,
+            (
+                source_filename,
+                customer_id,
+                mission_name,
+            ),
+        )
+
+        row = cursor.fetchone()
+
+        return row
+
+    finally:
+
+        connection.close()
 
 initialize_database()
