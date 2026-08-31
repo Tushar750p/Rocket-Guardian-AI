@@ -13,6 +13,13 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.telemetry_analysis import analyze_telemetry
 from src.risk_analysis import analyze_risk, summarize_risk
+from src.database import (
+    create_customer,
+    create_mission,
+    get_connection,
+    initialize_database,
+    save_telemetry_run,
+)
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
@@ -29,6 +36,7 @@ st.set_page_config(
     layout="wide",
 )
 
+initialize_database()
 
 # ============================================================
 # PATHS
@@ -365,6 +373,106 @@ if customer_mode:
             data
         )
 
+        # ----------------------------------------------------
+        # Save customer analysis to database
+        # ----------------------------------------------------
+
+        customer_email = "demo@rocketguardian.local"
+
+        connection = get_connection()
+
+        try:
+
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                SELECT id
+                FROM customers
+                WHERE email = ?
+                """,
+                (
+                    customer_email,
+                ),
+            )
+
+            customer_row = cursor.fetchone()
+
+        finally:
+
+            connection.close()
+
+
+        if customer_row is not None:
+
+            customer_id = int(
+                customer_row["id"]
+            )
+
+        else:
+
+            customer_id = int(
+                create_customer(
+                    "Demo Customer",
+                    customer_email,
+                )
+            )
+
+
+        # ----------------------------------------------------
+        # Create mission
+        # ----------------------------------------------------
+
+        mission_id = create_mission(
+            customer_id=customer_id,
+            name=f"Telemetry Analysis - {uploaded_file.name}",
+            description=(
+                "Customer telemetry analysis run."
+            ),
+        )
+
+
+        # ----------------------------------------------------
+        # Find peak risk
+        # ----------------------------------------------------
+
+        peak_index = risk_data[
+            "overall_risk"
+        ].idxmax()
+
+        peak_row = risk_data.loc[
+            peak_index
+        ]
+
+
+        # ----------------------------------------------------
+        # Save telemetry run
+        # ----------------------------------------------------
+
+        save_telemetry_run(
+            mission_id=mission_id,
+            source_filename=uploaded_file.name,
+            sample_count=len(data),
+            ai_detection_count=int(
+                data["ai_anomaly"].sum()
+            ),
+            overall_risk=float(
+                peak_row["overall_risk"]
+            ),
+            risk_level=str(
+                peak_row["risk_level"]
+            ),
+            primary_risk_sensor=str(
+                peak_row[
+                    "primary_risk_sensor"
+                ]
+            ),
+            peak_time_s=float(
+                peak_row["time_s"]
+            ),
+        )
+
+
     except ValueError as exc:
 
         st.error(
@@ -372,6 +480,14 @@ if customer_mode:
         )
 
         st.stop()
+
+
+    except Exception as exc:
+
+        st.warning(
+            "Risk analysis completed, but "
+            f"database save failed: {exc}"
+        )
 
 else:
 
