@@ -378,6 +378,7 @@ if customer_mode:
         # ----------------------------------------------------
 
         customer_email = "demo@rocketguardian.local"
+        source_filename = uploaded_file.name
 
         connection = get_connection()
 
@@ -385,6 +386,7 @@ if customer_mode:
 
             cursor = connection.cursor()
 
+            # Find existing customer
             cursor.execute(
                 """
                 SELECT id
@@ -398,79 +400,130 @@ if customer_mode:
 
             customer_row = cursor.fetchone()
 
+            # Create customer if it does not exist
+            if customer_row is not None:
+
+                customer_id = int(
+                    customer_row["id"]
+                )
+
+            else:
+
+                customer_id = int(
+                    create_customer(
+                        "Demo Customer",
+                        customer_email,
+                    )
+                )
+
         finally:
 
             connection.close()
 
 
-        if customer_row is not None:
+        # ----------------------------------------------------
+        # Check whether this file was already saved
+        # ----------------------------------------------------
 
-            customer_id = int(
-                customer_row["id"]
+        connection = get_connection()
+
+        try:
+
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                SELECT
+                    id
+                FROM telemetry_runs
+                WHERE source_filename = ?
+                AND mission_id IN (
+                    SELECT id
+                    FROM missions
+                    WHERE customer_id = ?
+                )
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (
+                    source_filename,
+                    customer_id,
+                ),
+            )
+
+            existing_run = cursor.fetchone()
+
+        finally:
+
+            connection.close()
+
+
+        # ----------------------------------------------------
+        # Only create a new mission/run for a new file
+        # ----------------------------------------------------
+
+        if existing_run is None:
+
+            mission_id = create_mission(
+                customer_id=customer_id,
+                name=(
+                    f"Telemetry Analysis - "
+                    f"{source_filename}"
+                ),
+                description=(
+                    "Customer telemetry analysis run."
+                ),
+            )
+
+            # ------------------------------------------------
+            # Find peak risk
+            # ------------------------------------------------
+
+            peak_index = risk_data[
+                "overall_risk"
+            ].idxmax()
+
+            peak_row = risk_data.loc[
+                peak_index
+            ]
+
+            # ------------------------------------------------
+            # Save telemetry run
+            # ------------------------------------------------
+
+            save_telemetry_run(
+                mission_id=mission_id,
+                source_filename=source_filename,
+                sample_count=len(data),
+                ai_detection_count=int(
+                    data["ai_anomaly"].sum()
+                ),
+                overall_risk=float(
+                    peak_row["overall_risk"]
+                ),
+                risk_level=str(
+                    peak_row["risk_level"]
+                ),
+                primary_risk_sensor=str(
+                    peak_row[
+                        "primary_risk_sensor"
+                    ]
+                ),
+                peak_time_s=float(
+                    peak_row["time_s"]
+                ),
+            )
+
+            st.sidebar.success(
+                "Analysis saved to mission history."
             )
 
         else:
 
-            customer_id = int(
-                create_customer(
-                    "Demo Customer",
-                    customer_email,
-                )
+            st.sidebar.info(
+                "This telemetry file is already "
+                "saved in mission history."
             )
-
-
-        # ----------------------------------------------------
-        # Create mission
-        # ----------------------------------------------------
-
-        mission_id = create_mission(
-            customer_id=customer_id,
-            name=f"Telemetry Analysis - {uploaded_file.name}",
-            description=(
-                "Customer telemetry analysis run."
-            ),
-        )
-
-
-        # ----------------------------------------------------
-        # Find peak risk
-        # ----------------------------------------------------
-
-        peak_index = risk_data[
-            "overall_risk"
-        ].idxmax()
-
-        peak_row = risk_data.loc[
-            peak_index
-        ]
-
-
-        # ----------------------------------------------------
-        # Save telemetry run
-        # ----------------------------------------------------
-
-        save_telemetry_run(
-            mission_id=mission_id,
-            source_filename=uploaded_file.name,
-            sample_count=len(data),
-            ai_detection_count=int(
-                data["ai_anomaly"].sum()
-            ),
-            overall_risk=float(
-                peak_row["overall_risk"]
-            ),
-            risk_level=str(
-                peak_row["risk_level"]
-            ),
-            primary_risk_sensor=str(
-                peak_row[
-                    "primary_risk_sensor"
-                ]
-            ),
-            peak_time_s=float(
-                peak_row["time_s"]
-            ),
-        )
 
 
     except ValueError as exc:
