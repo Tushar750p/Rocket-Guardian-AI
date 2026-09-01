@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
@@ -483,20 +483,20 @@ if customer_mode:
             cursor.execute(
                 """
                 SELECT
-                    id
-                FROM telemetry_runs
-                WHERE source_filename = ?
-                AND mission_id IN (
-                    SELECT id
-                    FROM missions
-                    WHERE customer_id = ?
-                )
-                ORDER BY id DESC
+                    tr.id
+                FROM telemetry_runs tr
+                JOIN missions m
+                    ON tr.mission_id = m.id
+                WHERE tr.source_filename = ?
+                AND m.customer_id = ?
+                AND m.name = ?
+                ORDER BY tr.id DESC
                 LIMIT 1
                 """,
                 (
                     source_filename,
                     customer_id,
+                    mission_name,
                 ),
             )
 
