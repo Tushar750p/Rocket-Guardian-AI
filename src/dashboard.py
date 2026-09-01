@@ -13,6 +13,13 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.telemetry_analysis import analyze_telemetry
 from src.risk_analysis import analyze_risk, summarize_risk
+from src.database import (
+    create_customer,
+    create_mission,
+    get_connection,
+    initialize_database,
+    save_telemetry_run,
+)
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
@@ -29,6 +36,7 @@ st.set_page_config(
     layout="wide",
 )
 
+initialize_database()
 
 # ============================================================
 # PATHS
@@ -171,7 +179,7 @@ st.markdown(
 # ============================================================
 
 st.markdown(
-    '<div class="main-title">🚀 Rocket Guardian AI</div>',
+    '<div class="main-title">Rocket Guardian AI</div>',
     unsafe_allow_html=True,
 )
 
@@ -214,12 +222,28 @@ if analysis_mode == "Demo Mission":
 
     uploaded_file = None
 
-
 # ============================================================
 # CUSTOMER UPLOAD MODE
 # ============================================================
 
 else:
+
+    st.sidebar.subheader("Customer Information")
+
+    customer_name = st.sidebar.text_input(
+        "Customer Name",
+        placeholder="Enter customer name",
+    )
+
+    customer_email = st.sidebar.text_input(
+        "Customer Email",
+        placeholder="customer@example.com",
+    )
+
+    mission_name = st.sidebar.text_input(
+        "Mission Name",
+        placeholder="Enter mission name",
+    )
 
     st.sidebar.subheader("Telemetry Input")
 
@@ -235,6 +259,7 @@ else:
     )
 
     selected = "Combined Failure"
+
 
 
 st.sidebar.divider()
@@ -258,6 +283,38 @@ st.sidebar.markdown(
 customer_mode = analysis_mode == "Customer Upload"
 
 if customer_mode:
+
+    if uploaded_file is None:
+
+        st.info(
+            "Please upload a telemetry CSV to begin analysis."
+        )
+
+        st.stop()
+
+    if not customer_name.strip():
+
+        st.error(
+            "Please enter Customer Name."
+        )
+
+        st.stop()
+
+    if not customer_email.strip():
+
+        st.error(
+            "Please enter Customer Email."
+        )
+
+        st.stop()
+
+    if not mission_name.strip():
+
+        st.error(
+            "Please enter Mission Name."
+        )
+
+        st.stop()
 
     try:
 
@@ -365,6 +422,156 @@ if customer_mode:
             data
         )
 
+        # ----------------------------------------------------
+        # Save customer analysis to database
+        # ----------------------------------------------------
+
+        
+        source_filename = uploaded_file.name
+
+        connection = get_connection()
+
+        try:
+
+            cursor = connection.cursor()
+
+            # Find existing customer
+            cursor.execute(
+                """
+                SELECT id
+                FROM customers
+                WHERE email = ?
+                """,
+                (
+                    customer_email,
+                ),
+            )
+
+            customer_row = cursor.fetchone()
+
+            # Create customer if it does not exist
+            if customer_row is not None:
+
+                customer_id = int(
+                    customer_row["id"]
+                )
+
+            else:
+
+                customer_id = int(
+                    create_customer(
+                        customer_name,
+                        customer_email,
+                    )
+                )
+
+        finally:
+
+            connection.close()
+
+
+        # ----------------------------------------------------
+        # Check whether this file was already saved
+        # ----------------------------------------------------
+
+        connection = get_connection()
+
+        try:
+
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                SELECT
+                    tr.id
+                FROM telemetry_runs tr
+                JOIN missions m
+                    ON tr.mission_id = m.id
+                WHERE tr.source_filename = ?
+                AND m.customer_id = ?
+                AND m.name = ?
+                ORDER BY tr.id DESC
+                LIMIT 1
+                """,
+                (
+                    source_filename,
+                    customer_id,
+                    mission_name,
+                ),
+            )
+
+            existing_run = cursor.fetchone()
+
+        finally:
+
+            connection.close()
+
+
+        # ----------------------------------------------------
+        # Only create a new mission/run for a new file
+        # ----------------------------------------------------
+
+        if existing_run is None:
+
+            mission_id = create_mission(
+                customer_id=customer_id,
+               name=mission_name,
+                description=(
+                    "Customer telemetry analysis run."
+                ),
+            )
+
+            # ------------------------------------------------
+            # Find peak risk
+            # ------------------------------------------------
+
+            peak_index = risk_data[
+                "overall_risk"
+            ].idxmax()
+
+            peak_row = risk_data.loc[
+                peak_index
+            ]
+
+            # ------------------------------------------------
+            # Save telemetry run
+            # ------------------------------------------------
+
+            save_telemetry_run(
+                mission_id=mission_id,
+                source_filename=source_filename,
+                sample_count=len(data),
+                ai_detection_count=int(
+                    data["ai_anomaly"].sum()
+                ),
+                overall_risk=float(
+                    peak_row["overall_risk"]
+                ),
+                risk_level=str(
+                    peak_row["risk_level"]
+                ),
+                primary_risk_sensor=str(
+                    peak_row[
+                        "primary_risk_sensor"
+                    ]
+                ),
+                peak_time_s=float(
+                    peak_row["time_s"]
+                ),
+            )
+
+            st.sidebar.success(
+                "Analysis saved to mission history."
+            )
+
+        else:
+
+            st.sidebar.info(
+                "This telemetry file is already "
+                "saved in mission history."
+            )
+
+
     except ValueError as exc:
 
         st.error(
@@ -372,6 +579,14 @@ if customer_mode:
         )
 
         st.stop()
+
+
+    except Exception as exc:
+
+        st.warning(
+            "Risk analysis completed, but "
+            f"database save failed: {exc}"
+        )
 
 else:
 
@@ -433,21 +648,21 @@ else:
 if highest_status == "CRITICAL":
 
     st.error(
-        "🔴 MISSION STATUS: CRITICAL\n\n"
+        "MISSION STATUS: CRITICAL\n\n"
         "Significant telemetry anomaly detected."
     )
 
 elif highest_status == "WARNING":
 
     st.warning(
-        "🟡 MISSION STATUS: WARNING\n\n"
+        "MISSION STATUS: WARNING\n\n"
         "Potential telemetry anomaly detected."
     )
 
 else:
 
     st.success(
-        "🟢 MISSION STATUS: NORMAL\n\n"
+        "MISSION STATUS: NORMAL\n\n"
         "Telemetry within the expected operating envelope."
     )
 
@@ -645,7 +860,7 @@ def create_chart(
         )
     )
 
-    # Actual anomaly — available only in research/test data
+    # Actual anomaly â€” available only in research/test data
     if "anomaly" in chart_data.columns:
         actual = chart_data[
             chart_data["anomaly"] == 1
@@ -684,7 +899,7 @@ def create_chart(
                 )
             )
 
-    # Anomaly start — research/test data only
+    # Anomaly start â€” research/test data only
     if not actual.empty:
         anomaly_start_time = actual[
             "time_s"
