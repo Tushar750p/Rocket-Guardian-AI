@@ -607,12 +607,13 @@ if customer_mode:
             )
 
 
+    except ValueError as exc:
+
         st.error(
             f"Risk analysis failed: {exc}"
         )
 
         st.stop()
-
 
     except Exception as exc:
 
