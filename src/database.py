@@ -4,8 +4,6 @@ from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
-
-
 # ============================================================
 # DATABASE CONFIGURATION
 # ============================================================
@@ -600,3 +598,76 @@ def find_telemetry_run(
 # ============================================================
 
 initialize_database()
+
+# ============================================================
+# CUSTOMER AUTH HELPERS
+# ============================================================
+
+def get_customer_by_auth_user_id(
+    auth_user_id,
+):
+    """
+    Return the customer linked to a Supabase Auth user.
+    """
+
+    connection = get_connection()
+
+    try:
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                name,
+                email,
+                auth_user_id,
+                created_at
+            FROM customers
+            WHERE auth_user_id = ?
+            LIMIT 1
+            """,
+            (
+                str(auth_user_id),
+            ),
+        )
+
+        return cursor.fetchone()
+
+    finally:
+
+        connection.close()
+
+
+def link_customer_to_auth_user(
+    customer_id,
+    auth_user_id,
+):
+    """
+    Link a customer record to a Supabase Auth user.
+    """
+
+    connection = get_connection()
+
+    try:
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            UPDATE customers
+            SET auth_user_id = ?
+            WHERE id = ?
+            """,
+            (
+                str(auth_user_id),
+                int(customer_id),
+            ),
+        )
+
+        connection.commit()
+
+    finally:
+
+        connection.close()

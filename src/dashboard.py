@@ -19,11 +19,18 @@ from src.database import (
     get_connection,
     initialize_database,
     save_telemetry_run,
+    get_customer_by_auth_user_id,
+    link_customer_to_auth_user,
 )
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER
+from src.auth import (
+    get_current_user,
+    render_login,
+    sign_out,
+)
 
 
 # ============================================================
@@ -37,6 +44,24 @@ st.set_page_config(
 )
 
 initialize_database()
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+current_user = get_current_user()
+
+if current_user is None:
+    render_login()
+    st.stop()
+
+current_user_email = (
+    getattr(current_user, "email", None) or ""
+).strip().lower()
+
+if not current_user_email:
+    st.error("Authenticated user email is unavailable.")
+    st.stop()
 
 # ============================================================
 # PATHS
@@ -235,10 +260,13 @@ else:
         placeholder="Enter customer name",
     )
 
-    customer_email = st.sidebar.text_input(
-        "Customer Email",
-        placeholder="customer@example.com",
+    st.sidebar.text_input(
+        "Account Email",
+        value=current_user_email,
+        disabled=True,
     )
+
+    customer_email = current_user_email
 
     mission_name = st.sidebar.text_input(
         "Mission Name",
@@ -259,24 +287,6 @@ else:
     )
 
     selected = "Combined Failure"
-
-
-
-st.sidebar.divider()
-
-st.sidebar.markdown(
-    """
-    **Monitoring System**
-
-    NORMAL - Normal
-
-    WARNING - Warning
-
-    CRITICAL - Critical
-    """
-)
-
-
 # ============================================================
 # LOAD TELEMETRY DATA
 # ============================================================
@@ -426,34 +436,62 @@ if customer_mode:
         # Save customer analysis to database
         # ----------------------------------------------------
 
-        
         source_filename = uploaded_file.name
 
-        connection = get_connection()
+        # ----------------------------------------------------
+        # Link logged-in Auth user to customer
+        # ----------------------------------------------------
 
-        try:
+        customer_id = None
 
-            cursor = connection.cursor()
+        # First: find customer already linked to this Auth user
+        customer_row = get_customer_by_auth_user_id(
+            current_user.id
+        )
 
-            # Find existing customer
-            cursor.execute(
-                """
-                SELECT id
-                FROM customers
-                WHERE email = ?
-                """,
-                (
-                    customer_email,
-                ),
+        if customer_row is not None:
+
+            customer_id = int(
+                customer_row["id"]
             )
 
-            customer_row = cursor.fetchone()
+        else:
 
-            # Create customer if it does not exist
+            # Second: try existing customer with same login email
+            connection = get_connection()
+
+            try:
+
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    SELECT id
+                    FROM customers
+                    WHERE LOWER(email) = LOWER(?)
+                    ORDER BY id ASC
+                    LIMIT 1
+                    """,
+                    (
+                        current_user_email,
+                    ),
+                )
+
+                customer_row = cursor.fetchone()
+
+            finally:
+
+                connection.close()
+
             if customer_row is not None:
 
                 customer_id = int(
                     customer_row["id"]
+                )
+
+                link_customer_to_auth_user(
+                    customer_id,
+                    current_user.id,
                 )
 
             else:
@@ -461,14 +499,14 @@ if customer_mode:
                 customer_id = int(
                     create_customer(
                         customer_name,
-                        customer_email,
+                        current_user_email,
                     )
                 )
 
-        finally:
-
-            connection.close()
-
+                link_customer_to_auth_user(
+                    customer_id,
+                    current_user.id,
+                )
 
         # ----------------------------------------------------
         # Check whether this file was already saved
@@ -506,7 +544,6 @@ if customer_mode:
 
             connection.close()
 
-
         # ----------------------------------------------------
         # Only create a new mission/run for a new file
         # ----------------------------------------------------
@@ -515,7 +552,7 @@ if customer_mode:
 
             mission_id = create_mission(
                 customer_id=customer_id,
-               name=mission_name,
+                name=mission_name,
                 description=(
                     "Customer telemetry analysis run."
                 ),
@@ -551,9 +588,7 @@ if customer_mode:
                     peak_row["risk_level"]
                 ),
                 primary_risk_sensor=str(
-                    peak_row[
-                        "primary_risk_sensor"
-                    ]
+                    peak_row["primary_risk_sensor"]
                 ),
                 peak_time_s=float(
                     peak_row["time_s"]
@@ -571,8 +606,6 @@ if customer_mode:
                 "saved in mission history."
             )
 
-
-    except ValueError as exc:
 
         st.error(
             f"Risk analysis failed: {exc}"
