@@ -85,18 +85,23 @@ def reset_password(email):
 
     client = get_supabase_client()
 
+    clean_email = email.strip()
+
+    # Remove accidental Markdown mail-link formatting.
+    if clean_email.startswith("[") and "](" in clean_email:
+        clean_email = clean_email.split("](", 1)[0].lstrip("[").strip()
+
     redirect_url = os.getenv(
         "SUPABASE_REDIRECT_URL",
         "http://localhost:8501",
     )
 
     return client.auth.reset_password_for_email(
-        email.strip(),
+        clean_email,
         options={
             "redirect_to": redirect_url,
         },
     )
-
 
 def update_password(new_password):
     """
