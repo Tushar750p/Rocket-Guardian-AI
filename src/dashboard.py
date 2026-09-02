@@ -777,19 +777,6 @@ with col1:
             "AI Detection Rate",
             f"{detection_rate:.1f}%",
         )
-
-    else:
-
-        coverage = (
-            ai_detections / actual_anomalies * 100
-            if actual_anomalies > 0
-            else 0
-        )
-
-        st.metric(
-            "Detection Coverage",
-            f"{coverage:.1f}%",
-        )
 with col2:
 
     st.metric(
@@ -1194,9 +1181,15 @@ with col1:
 
     if customer_mode:
 
+        detection_rate = (
+            ai_detections / total_samples * 100
+            if total_samples > 0
+            else 0
+        )
+
         st.metric(
-            "Detection Coverage",
-            "N/A",
+            "AI Detection Rate",
+            f"{detection_rate:.1f}%",
         )
 
     else:
