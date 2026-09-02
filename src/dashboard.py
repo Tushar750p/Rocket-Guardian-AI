@@ -21,6 +21,7 @@ from src.database import (
     save_telemetry_run,
     get_customer_by_auth_user_id,
     link_customer_to_auth_user,
+    get_customer_mission_history,
 )
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -1721,6 +1722,72 @@ if customer_mode and risk_data is not None:
         file_name="rocket_guardian_analysis_report.txt",
         mime="text/plain",
     )
+
+# ============================================================
+# MISSION HISTORY
+# ============================================================
+
+st.subheader("Mission History")
+
+history_customer = get_customer_by_auth_user_id(
+    current_user.id
+)
+
+if history_customer is None:
+
+    st.info(
+        "No customer profile is linked to this account yet."
+    )
+
+else:
+
+    history_rows = get_customer_mission_history(
+        int(history_customer["id"])
+    )
+
+    if not history_rows:
+
+        st.info(
+            "No mission history available yet."
+        )
+
+    else:
+
+        history_data = pd.DataFrame(
+            history_rows
+        )
+
+        history_display = history_data[
+            [
+                "mission_name",
+                "source_filename",
+                "sample_count",
+                "ai_detection_count",
+                "overall_risk",
+                "risk_level",
+                "primary_risk_sensor",
+                "peak_time_s",
+                "run_created_at",
+            ]
+        ].copy()
+
+        history_display.columns = [
+            "Mission",
+            "Telemetry File",
+            "Samples",
+            "AI Detections",
+            "Overall Risk",
+            "Risk Level",
+            "Primary Risk Sensor",
+            "Peak Time (s)",
+            "Created At",
+        ]
+
+        st.dataframe(
+            history_display,
+            width="stretch",
+            hide_index=True,
+        )
 
 # ============================================================
 # RAW DATA

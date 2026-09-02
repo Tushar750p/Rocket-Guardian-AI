@@ -671,3 +671,46 @@ def link_customer_to_auth_user(
     finally:
 
         connection.close()
+
+
+def get_customer_mission_history(customer_id):
+    """
+    Return missions and telemetry runs for one customer.
+    """
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT
+                m.id AS mission_id,
+                m.name AS mission_name,
+                m.description,
+                m.created_at AS mission_created_at,
+                tr.id AS run_id,
+                tr.source_filename,
+                tr.sample_count,
+                tr.ai_detection_count,
+                tr.overall_risk,
+                tr.risk_level,
+                tr.primary_risk_sensor,
+                tr.peak_time_s,
+                tr.created_at AS run_created_at
+            FROM missions m
+            LEFT JOIN telemetry_runs tr
+                ON tr.mission_id = m.id
+            WHERE m.customer_id = ?
+            ORDER BY m.created_at DESC, tr.created_at DESC
+            """,
+            (
+                int(customer_id),
+            ),
+        )
+
+        return cursor.fetchall()
+
+    finally:
+        connection.close()
