@@ -820,7 +820,6 @@ with col3:
             "Detection Delay",
             f"{detection_delay:.1f} s",
         )
-
 with col4:
 
     st.metric(
