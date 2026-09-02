@@ -1809,6 +1809,7 @@ with st.expander(
 # ============================================================
 
 st.caption(
-    "Rocket Guardian AI - Research Prototype | "
-    "Synthetic telemetry data | Not for flight-critical use"
+    "Rocket Guardian AI - Research Prototype\n"
+"Synthetic telemetry / customer-provided telemetry\n"
+"Not for flight-critical use"
 )
