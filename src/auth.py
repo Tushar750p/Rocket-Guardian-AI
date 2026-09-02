@@ -2,12 +2,13 @@ import os
 
 import streamlit as st
 from supabase import create_client, Client
+from supabase.client import ClientOptions
 
 
 @st.cache_resource
 def get_supabase_client() -> Client:
     """
-    Create and cache the Supabase client.
+    Create and cache the Supabase client with PKCE auth flow.
     """
 
     supabase_url = os.getenv("SUPABASE_URL")
@@ -19,9 +20,14 @@ def get_supabase_client() -> Client:
     if not supabase_key:
         raise RuntimeError("SUPABASE_KEY is not configured.")
 
+    options = ClientOptions(
+        flow_type="pkce",
+    )
+
     return create_client(
         supabase_url,
         supabase_key,
+        options=options,
     )
 
 
@@ -89,7 +95,11 @@ def reset_password(email):
 
     # Remove accidental Markdown mail-link formatting.
     if clean_email.startswith("[") and "](" in clean_email:
-        clean_email = clean_email.split("](", 1)[0].lstrip("[").strip()
+        clean_email = (
+            clean_email.split("](", 1)[0]
+            .lstrip("[")
+            .strip()
+        )
 
     redirect_url = os.getenv(
         "SUPABASE_REDIRECT_URL",
@@ -102,6 +112,7 @@ def reset_password(email):
             "redirect_to": redirect_url,
         },
     )
+
 
 def update_password(new_password):
     """
@@ -138,12 +149,11 @@ def handle_password_recovery():
     """
     Detect a Supabase password-recovery callback.
 
-    For PKCE flows, Supabase can return a `code` query parameter.
+    With the PKCE flow, Supabase redirects back to the
+    application with a `code` query parameter.
     """
 
-    query_params = st.query_params
-
-    code = query_params.get("code")
+    code = st.query_params.get("code")
 
     if not code:
         return False
