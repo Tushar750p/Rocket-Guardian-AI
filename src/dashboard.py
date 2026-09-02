@@ -767,19 +767,29 @@ with col1:
 
     if customer_mode:
 
+        detection_rate = (
+            ai_detections / total_samples * 100
+            if total_samples > 0
+            else 0
+        )
+
         st.metric(
-            "Actual Anomalies",
-            "N/A",
+            "AI Detection Rate",
+            f"{detection_rate:.1f}%",
         )
 
     else:
 
-        st.metric(
-            "Actual Anomalies",
-            actual_anomalies,
+        coverage = (
+            ai_detections / actual_anomalies * 100
+            if actual_anomalies > 0
+            else 0
         )
 
-
+        st.metric(
+            "Detection Coverage",
+            f"{coverage:.1f}%",
+        )
 with col2:
 
     st.metric(
@@ -790,7 +800,14 @@ with col2:
 
 with col3:
 
-    if detection_delay is None:
+    if customer_mode:
+
+        st.metric(
+            "Detection Delay",
+            "Ground Truth N/A",
+        )
+
+    elif detection_delay is None:
 
         st.metric(
             "Detection Delay",
@@ -803,7 +820,6 @@ with col3:
             "Detection Delay",
             f"{detection_delay:.1f} s",
         )
-
 
 with col4:
 
