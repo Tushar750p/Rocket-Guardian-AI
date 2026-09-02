@@ -1,5 +1,4 @@
 import os
-from urllib.parse import urlparse, parse_qs
 
 import streamlit as st
 from supabase import create_client, Client
@@ -86,7 +85,6 @@ def reset_password(email):
 
     client = get_supabase_client()
 
-    # The app URL is used as the recovery redirect.
     redirect_url = os.getenv(
         "SUPABASE_REDIRECT_URL",
         "http://localhost:8501",
@@ -145,7 +143,6 @@ def handle_password_recovery():
     if not code:
         return False
 
-    # Avoid exchanging the same code more than once.
     if st.session_state.get("recovery_code") == code:
         return st.session_state.get(
             "password_recovery",
@@ -169,7 +166,6 @@ def handle_password_recovery():
         st.session_state["password_recovery"] = True
         st.session_state["recovery_code"] = code
 
-        # Remove the code from the visible URL.
         st.query_params.clear()
 
         return True
@@ -258,7 +254,6 @@ def render_login():
     Returns True when a user is authenticated.
     """
 
-    # Check whether this is a password recovery callback.
     if handle_password_recovery():
 
         render_password_recovery()
@@ -277,12 +272,12 @@ def render_login():
 
     with tab_login:
 
-        email = st.text_input(
+        st.text_input(
             "Email",
             key="login_email",
         )
 
-        password = st.text_input(
+        st.text_input(
             "Password",
             type="password",
             key="login_password",
@@ -294,13 +289,26 @@ def render_login():
             use_container_width=True,
         ):
 
-            if not email.strip():
+            login_email = (
+                st.session_state.get(
+                    "login_email",
+                    "",
+                )
+                .strip()
+            )
+
+            login_password = st.session_state.get(
+                "login_password",
+                "",
+            )
+
+            if not login_email:
 
                 st.error(
                     "Please enter your email."
                 )
 
-            elif not password:
+            elif not login_password:
 
                 st.error(
                     "Please enter your password."
@@ -311,8 +319,8 @@ def render_login():
                 try:
 
                     user = sign_in(
-                        email,
-                        password,
+                        login_email,
+                        login_password,
                     )
 
                     if user is not None:
@@ -336,7 +344,15 @@ def render_login():
             use_container_width=True,
         ):
 
-            if not email.strip():
+            reset_email = (
+                st.session_state.get(
+                    "login_email",
+                    "",
+                )
+                .strip()
+            )
+
+            if not reset_email:
 
                 st.error(
                     "Please enter your email first."
@@ -346,7 +362,9 @@ def render_login():
 
                 try:
 
-                    reset_password(email)
+                    reset_password(
+                        reset_email
+                    )
 
                     st.success(
                         "Password reset email sent. "
@@ -361,12 +379,12 @@ def render_login():
 
     with tab_signup:
 
-        signup_email = st.text_input(
+        st.text_input(
             "Email",
             key="signup_email",
         )
 
-        signup_password = st.text_input(
+        st.text_input(
             "Password",
             type="password",
             key="signup_password",
@@ -377,7 +395,20 @@ def render_login():
             use_container_width=True,
         ):
 
-            if not signup_email.strip():
+            signup_email = (
+                st.session_state.get(
+                    "signup_email",
+                    "",
+                )
+                .strip()
+            )
+
+            signup_password = st.session_state.get(
+                "signup_password",
+                "",
+            )
+
+            if not signup_email:
 
                 st.error(
                     "Please enter your email."
