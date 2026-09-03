@@ -1405,15 +1405,22 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
 
+   if actual_anomalies is not None and actual_anomalies > 0:
+
     coverage = (
         ai_detections / actual_anomalies * 100
-        if actual_anomalies is not None and actual_anomalies > 0
-        else 0
     )
 
     st.metric(
         "Detection Coverage",
         f"{coverage:.1f}%",
+    )
+
+else:
+
+    st.metric(
+        "Detection Coverage",
+        "N/A",
     )
 
 with col2:
@@ -2088,6 +2095,98 @@ else:
             width="stretch",
             hide_index=True,
         )
+
+# ============================================================
+# RUN-TO-RUN MISSION COMPARISON
+# ============================================================
+
+st.subheader("Run-to-Run Mission Comparison")
+
+if len(history_data) >= 2:
+
+    comparison_data = history_data[
+        [
+            "mission_name",
+            "ai_detection_count",
+            "overall_risk",
+            "risk_level",
+            "primary_risk_sensor",
+        ]
+    ].copy()
+
+    comparison_data = comparison_data.head(10)
+
+    comparison_display = comparison_data.copy()
+
+    comparison_display.columns = [
+        "Mission",
+        "AI Detections",
+        "Overall Risk",
+        "Risk Level",
+        "Primary Sensor",
+    ]
+
+    st.dataframe(
+        comparison_display,
+        width="stretch",
+        hide_index=True,
+    )
+
+    latest = comparison_data.iloc[0]
+    previous = comparison_data.iloc[1]
+
+    risk_change = (
+        float(latest["overall_risk"])
+        - float(previous["overall_risk"])
+    )
+
+    detection_change = (
+        int(latest["ai_detection_count"])
+        - int(previous["ai_detection_count"])
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.metric(
+            "Risk Change vs Previous",
+            f"{risk_change:+.1f}",
+        )
+
+    with col2:
+
+        st.metric(
+            "AI Detection Change",
+            f"{detection_change:+d}",
+        )
+
+    if risk_change > 0:
+
+        st.warning(
+            "Latest mission shows increased overall risk "
+            "compared with the previous mission."
+        )
+
+    elif risk_change < 0:
+
+        st.success(
+            "Latest mission shows reduced overall risk "
+            "compared with the previous mission."
+        )
+
+    else:
+
+        st.info(
+            "Overall risk is unchanged from the previous mission."
+        )
+
+else:
+
+    st.info(
+        "Run-to-run comparison will be available "
+        "after at least two missions are recorded."
+    )
 
 # ============================================================
 # RAW DATA
