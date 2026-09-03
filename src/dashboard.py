@@ -1209,7 +1209,7 @@ if "anomaly_score" in data.columns:
     st.info(
         f"AI detected the strongest abnormal behavior in the "
         f"{top_sensor} sensor during the {peak_row['phase']} phase. "
-        f"The sensor deviation reached {top_z:.2f}s from its "
+        f"The sensor deviation reached {top_z:.2f}σ from its "
         f"phase-specific baseline."
     )
 
