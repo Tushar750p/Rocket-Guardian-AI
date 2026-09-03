@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
@@ -343,7 +343,6 @@ if customer_mode:
         preview = pd.read_csv(
             pd.io.common.BytesIO(uploaded_bytes)
         )
-
         missing_columns = [
             column
             for column in required_columns
@@ -359,10 +358,96 @@ if customer_mode:
 
             st.stop()
 
+        if preview.empty:
+
+            st.error(
+                "Invalid telemetry CSV. The file contains no data rows."
+            )
+
+            st.stop()
+
+        numeric_columns = [
+            "time_s",
+            "pressure_kpa",
+            "temperature_k",
+            "vibration_g",
+            "thrust_n",
+        ]
+
+        for column in numeric_columns:
+
+            converted = pd.to_numeric(
+                preview[column],
+                errors="coerce",
+            )
+
+            invalid_count = int(
+                converted.isna().sum()
+            )
+
+            if invalid_count > 0:
+
+                st.error(
+                    f"Invalid telemetry CSV. Column '{column}' "
+                    f"contains {invalid_count} missing or non-numeric value(s)."
+                )
+
+                st.stop()
+
+            preview[column] = converted
+
+        if preview["phase"].isna().any():
+
+            st.error(
+                "Invalid telemetry CSV. "
+                "The 'phase' column contains missing values."
+            )
+
+            st.stop()
+
+        supported_phases = {
+            "startup",
+            "ramp",
+            "steady",
+            "shutdown",
+        }
+
+        phase_values = (
+            preview["phase"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+
+        unsupported_phases = sorted(
+            set(phase_values.unique()) - supported_phases
+        )
+
+        if unsupported_phases:
+
+            st.error(
+                "Invalid telemetry CSV. Unsupported phase value(s): "
+                + ", ".join(unsupported_phases)
+                + ". Supported phases: startup, ramp, steady, shutdown."
+            )
+
+            st.stop()
+
+        preview["phase"] = phase_values
+        if len(preview) < 10:
+
+            st.error(
+                "Invalid telemetry CSV. "
+                "At least 10 telemetry rows are required."
+            )
+
+            st.stop()
+
         fd, temp_path = tempfile.mkstemp(
             suffix=".csv"
         )
-
+              
+       
         try:
 
             with os.fdopen(fd, "wb") as temp_file:
@@ -897,7 +982,7 @@ def create_chart(
         )
     )
 
-    # Actual anomaly â€” available only in research/test data
+    # Actual anomaly Ã¢â‚¬â€ available only in research/test data
     if "anomaly" in chart_data.columns:
         actual = chart_data[
             chart_data["anomaly"] == 1
@@ -936,7 +1021,7 @@ def create_chart(
                 )
             )
 
-    # Anomaly start â€” research/test data only
+    # Anomaly start Ã¢â‚¬â€ research/test data only
     if not actual.empty:
         anomaly_start_time = actual[
             "time_s"
@@ -1813,3 +1898,4 @@ st.caption(
 "Synthetic telemetry / customer-provided telemetry\n"
 "Not for flight-critical use"
 )
+
