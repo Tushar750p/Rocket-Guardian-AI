@@ -2095,99 +2095,172 @@ else:
             hide_index=True,
         )
 
-# ============================================================
-# RUN-TO-RUN MISSION COMPARISON
-# ============================================================
+        #============================================================
+        # RUN-TO-RUN MISSION COMPARISON
+        #============================================================
 
-st.subheader("Run-to-Run Mission Comparison")
+        st.subheader("Run-to-Run Mission Comparison")
 
-if len(history_data) >= 2:
+        if len(history_data) >= 2:
 
-    comparison_data = history_data[
-        [
-            "mission_name",
-            "ai_detection_count",
-            "overall_risk",
-            "risk_level",
-            "primary_risk_sensor",
-        ]
-    ].copy()
+            comparison_data = history_data[
+                [
+                    "mission_name",
+                    "ai_detection_count",
+                    "overall_risk",
+                    "risk_level",
+                    "primary_risk_sensor",
+                ]
+            ].copy()
 
-    comparison_data = comparison_data.head(10)
+            comparison_data = comparison_data.head(10)
 
-    comparison_display = comparison_data.copy()
+            comparison_display = comparison_data.copy()
 
-    comparison_display.columns = [
-        "Mission",
-        "AI Detections",
-        "Overall Risk",
-        "Risk Level",
-        "Primary Sensor",
-    ]
+            comparison_display.columns = [
+                "Mission",
+                "AI Detections",
+                "Overall Risk",
+                "Risk Level",
+                "Primary Sensor",
+            ]
 
-    st.dataframe(
-        comparison_display,
-        width="stretch",
-        hide_index=True,
-    )
+            st.dataframe(
+                comparison_display,
+                width="stretch",
+                hide_index=True,
+            )
 
-    latest = comparison_data.iloc[0]
-    previous = comparison_data.iloc[1]
+            latest = comparison_data.iloc[0]
+            previous = comparison_data.iloc[1]
 
-    risk_change = (
-        float(latest["overall_risk"])
-        - float(previous["overall_risk"])
-    )
+            risk_change = (
+                float(latest["overall_risk"])
+                - float(previous["overall_risk"])
+            )
 
-    detection_change = (
-        int(latest["ai_detection_count"])
-        - int(previous["ai_detection_count"])
-    )
+            detection_change = (
+                int(latest["ai_detection_count"])
+                - int(previous["ai_detection_count"])
+            )
 
-    col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2)
 
-    with col1:
+            with col1:
 
-        st.metric(
-            "Risk Change vs Previous",
-            f"{risk_change:+.1f}",
-        )
+                st.metric(
+                    "Risk Change vs Previous",
+                    f"{risk_change:+.1f}",
+                )
 
-    with col2:
+            with col2:
 
-        st.metric(
-            "AI Detection Change",
-            f"{detection_change:+d}",
-        )
+                st.metric(
+                    "AI Detection Change",
+                    f"{detection_change:+d}",
+                )
 
-    if risk_change > 0:
+            if risk_change > 0:
 
-        st.warning(
-            "Latest mission shows increased overall risk "
-            "compared with the previous mission."
-        )
+                st.warning(
+                    "Latest mission shows increased overall risk "
+                    "compared with the previous mission."
+                )
 
-    elif risk_change < 0:
+            elif risk_change < 0:
 
-        st.success(
-            "Latest mission shows reduced overall risk "
-            "compared with the previous mission."
-        )
+                st.success(
+                    "Latest mission shows reduced overall risk "
+                    "compared with the previous mission."
+                )
 
-    else:
+            else:
 
-        st.info(
-            "Overall risk is unchanged from the previous mission."
-        )
+                st.info(
+                    "Overall risk is unchanged from the previous mission."
+                )
 
-else:
+        else:
 
-    st.info(
-        "Run-to-run comparison will be available "
-        "after at least two missions are recorded."
-    )
+            st.info(
+                "Run-to-run comparison will be available "
+                "after at least two missions are recorded."
+            )
 
-# ============================================================
+        #============================================================
+# MISSION HEALTH SCORE
+#============================================================
+
+        st.subheader("Mission Health Score")
+
+        if len(history_data) > 0:
+
+            health_data = history_data.copy()
+
+            health_data["health_score"] = (
+                100.0
+                - health_data["overall_risk"].astype(float)
+            ).clip(0, 100)
+
+            latest_health = float(
+                health_data.iloc[0]["health_score"]
+            )
+
+            st.metric(
+                "Current Mission Health",
+                f"{latest_health:.1f}/100",
+            )
+
+            if len(health_data) >= 2:
+
+                previous_health = float(
+                    health_data.iloc[1]["health_score"]
+                )
+
+                health_change = (
+                    latest_health
+                    - previous_health
+                )
+
+                st.metric(
+                    "Health Change vs Previous",
+                    f"{health_change:+.1f}",
+                )
+
+            trend_data = health_data.head(10).copy()
+            trend_data = trend_data.iloc[::-1]
+
+            trend_fig = go.Figure()
+
+            trend_fig.add_trace(
+                go.Scatter(
+                    x=trend_data["mission_name"],
+                    y=trend_data["health_score"],
+                    mode="lines+markers",
+                    name="Mission Health",
+                )
+            )
+
+            trend_fig.update_layout(
+                title="Mission Health Trend",
+                xaxis_title="Mission",
+                yaxis_title="Health Score",
+                yaxis=dict(range=[0, 100]),
+                height=320,
+            )
+
+            st.plotly_chart(
+                trend_fig,
+                width="stretch",
+            )
+
+        else:
+
+            st.info(
+                "Mission health will be available "
+                "after a mission is recorded."
+            )
+        #============================================================
 # RAW DATA
 # ============================================================
 
