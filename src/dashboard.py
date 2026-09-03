@@ -1401,37 +1401,20 @@ if detection_delay is not None:
     )
 
 
-col1, col2 = st.columns(2)
-
+col1, col2, col3 = st.columns(3)
 
 with col1:
 
-    if customer_mode:
+    coverage = (
+        ai_detections / actual_anomalies * 100
+        if actual_anomalies is not None and actual_anomalies > 0
+        else 0
+    )
 
-        detection_rate = (
-            ai_detections / total_samples * 100
-            if total_samples > 0
-            else 0
-        )
-
-        st.metric(
-            "AI Detection Rate",
-            f"{detection_rate:.1f}%",
-        )
-
-    else:
-
-        coverage = (
-            ai_detections / actual_anomalies * 100
-            if actual_anomalies > 0
-            else 0
-        )
-
-        st.metric(
-            "Detection Coverage",
-            f"{coverage:.1f}%",
-        )
-
+    st.metric(
+        "Detection Coverage",
+        f"{coverage:.1f}%",
+    )
 
 with col2:
 
@@ -1445,6 +1428,97 @@ with col2:
     st.metric(
         "Critical Samples",
         critical_count,
+    )
+
+with col3:
+
+    precision = None
+    recall = None
+    f1_score = None
+    false_positive_rate = None
+
+    if (
+        "anomaly" in data.columns
+        and "ai_anomaly" in data.columns
+    ):
+
+        actual = data["anomaly"].astype(int)
+        predicted = data["ai_anomaly"].astype(int)
+
+        true_positive = int(
+            ((actual == 1) & (predicted == 1)).sum()
+        )
+
+        false_positive = int(
+            ((actual == 0) & (predicted == 1)).sum()
+        )
+
+        false_negative = int(
+            ((actual == 1) & (predicted == 0)).sum()
+        )
+
+        true_negative = int(
+            ((actual == 0) & (predicted == 0)).sum()
+        )
+
+        precision = (
+            true_positive / (true_positive + false_positive)
+            if (true_positive + false_positive) > 0
+            else 0
+        )
+
+        recall = (
+            true_positive / (true_positive + false_negative)
+            if (true_positive + false_negative) > 0
+            else 0
+        )
+
+        f1_score = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0
+        )
+
+        false_positive_rate = (
+            false_positive / (false_positive + true_negative)
+            if (false_positive + true_negative) > 0
+            else 0
+        )
+
+col4, col5, col6 = st.columns(3)
+
+with col4:
+
+    st.metric(
+        "Precision",
+        f"{precision * 100:.1f}%"
+        if precision is not None
+        else "N/A",
+    )
+
+with col5:
+
+    st.metric(
+        "Recall",
+        f"{recall * 100:.1f}%"
+        if recall is not None
+        else "N/A",
+    )
+
+with col6:
+
+    st.metric(
+        "F1 Score",
+        f"{f1_score * 100:.1f}%"
+        if f1_score is not None
+        else "N/A",
+    )
+
+if false_positive_rate is not None:
+
+    st.caption(
+        f"False Positive Rate: "
+        f"{false_positive_rate * 100:.1f}%"
     )
 
 
