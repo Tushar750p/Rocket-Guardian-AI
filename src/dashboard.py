@@ -501,10 +501,7 @@ else:
 
         st.stop()
 
-    data = pd.read_csv(
-        file_path
-    )
-
+   
 
 # ============================================================
 # LOAD V14 RISK DATA
@@ -1216,6 +1213,50 @@ if "anomaly_score" in data.columns:
 else:
 
     st.info("Advanced anomaly explanation is not available.")
+
+# ============================================================
+# SENSOR CONTRIBUTION
+# ============================================================
+
+st.subheader("Sensor Contribution")
+
+contribution = {
+    "Pressure": float(data["pressure_kpa_z"].abs().max()),
+    "Temperature": float(data["temperature_k_z"].abs().max()),
+    "Vibration": float(data["vibration_g_z"].abs().max()),
+    "Thrust": float(data["thrust_n_z"].abs().max()),
+}
+
+contribution_df = (
+    pd.DataFrame(
+        list(contribution.items()),
+        columns=["Sensor", "Deviation"],
+    )
+    .sort_values("Deviation", ascending=True)
+)
+
+fig = go.Figure(
+    go.Bar(
+        x=contribution_df["Deviation"],
+        y=contribution_df["Sensor"],
+        orientation="h",
+        text=contribution_df["Deviation"].round(2),
+        textposition="auto",
+    )
+)
+
+fig.update_layout(
+    title="Maximum Sensor Deviation from Phase Baseline",
+    xaxis_title="Deviation (σ)",
+    yaxis_title="Sensor",
+    height=320,
+)
+
+st.plotly_chart(
+    fig,
+    width="stretch",
+)
+
 # ============================================================
 # AI ALERT TIMELINE
 # ============================================================
