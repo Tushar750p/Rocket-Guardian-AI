@@ -1405,24 +1405,23 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
 
-   if actual_anomalies is not None and actual_anomalies > 0:
+    if actual_anomalies is not None and actual_anomalies > 0:
 
-    coverage = (
-        ai_detections / actual_anomalies * 100
-    )
+        coverage = (
+            ai_detections / actual_anomalies * 100
+        )
 
-    st.metric(
-        "Detection Coverage",
-        f"{coverage:.1f}%",
-    )
+        st.metric(
+            "Detection Coverage",
+            f"{coverage:.1f}%",
+        )
 
-else:
+    else:
 
-    st.metric(
-        "Detection Coverage",
-        "N/A",
-    )
-
+        st.metric(
+            "Detection Coverage",
+            "N/A",
+        )
 with col2:
 
     critical_count = int(
