@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
@@ -982,7 +982,7 @@ def create_chart(
         )
     )
 
-    # Actual anomaly Ã¢â‚¬â€ available only in research/test data
+    # Actual anomaly â€” available only in research/test data
     if "anomaly" in chart_data.columns:
         actual = chart_data[
             chart_data["anomaly"] == 1
@@ -1021,7 +1021,7 @@ def create_chart(
                 )
             )
 
-    # Anomaly start Ã¢â‚¬â€ research/test data only
+    # Anomaly start â€” research/test data only
     if not actual.empty:
         anomaly_start_time = actual[
             "time_s"
@@ -1151,7 +1151,7 @@ with insight_cols[2]:
 with insight_cols[3]:
     st.metric(
         "Primary Risk Sensor",
-        str(data["primary_risk_sensor"].iloc[-1])
+        ({"vibration_g":"Vibration","pressure_kpa":"Pressure","temperature_k":"Temperature","thrust_n":"Thrust"}.get({"vibration_g":"Vibration","pressure_kpa":"Pressure","temperature_k":"Temperature","thrust_n":"Thrust"}.get(str(data["primary_risk_sensor"].iloc[-1]), str(data["primary_risk_sensor"].iloc[-1])), {"vibration_g":"Vibration","pressure_kpa":"Pressure","temperature_k":"Temperature","thrust_n":"Thrust"}.get(str(data["primary_risk_sensor"].iloc[-1]), str(data["primary_risk_sensor"].iloc[-1]))))
         if "primary_risk_sensor" in data.columns else "N/A"
     )
 
@@ -1199,7 +1199,7 @@ if "anomaly_score" in data.columns:
     )
 
     st.write(
-        f"**Peak Sensor Deviation:** {top_z:.2f}σ from phase baseline"
+        f"**Peak Sensor Deviation:** {top_z:.2f}s from phase baseline"
     )
 
     st.write(
@@ -1209,7 +1209,7 @@ if "anomaly_score" in data.columns:
     st.info(
         f"AI detected the strongest abnormal behavior in the "
         f"{top_sensor} sensor during the {peak_row['phase']} phase. "
-        f"The sensor deviation reached {top_z:.2f}σ from its "
+        f"The sensor deviation reached {top_z:.2f}s from its "
         f"phase-specific baseline."
     )
 
@@ -1250,7 +1250,7 @@ fig = go.Figure(
 
 fig.update_layout(
     title="Maximum Sensor Deviation from Phase Baseline",
-    xaxis_title="Deviation (σ)",
+    xaxis_title="Deviation (s)",
     yaxis_title="Sensor",
     height=320,
 )
@@ -1556,9 +1556,7 @@ if risk_data is not None:
         peak_row["overall_risk"]
     )
 
-    primary_sensor = (
-        peak_row["primary_risk_sensor"]
-    )
+    primary_sensor = str(peak_row["primary_risk_sensor"]).replace("vibration_g","Vibration").replace("pressure_kpa","Pressure").replace("temperature_k","Temperature").replace("thrust_n","Thrust")
 
     risk_level = (
         peak_row["risk_level"]
@@ -2284,4 +2282,8 @@ st.caption(
 "Synthetic telemetry / customer-provided telemetry\n"
 "Not for flight-critical use"
 )
+
+
+
+
 
