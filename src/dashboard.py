@@ -1120,6 +1120,103 @@ with right:
 
 
 # ============================================================
+# ADVANCED AI INSIGHTS
+# ============================================================
+
+st.subheader("Advanced AI Insights")
+
+insight_cols = st.columns(4)
+
+with insight_cols[0]:
+    st.metric(
+        "Anomaly Score",
+        f"{float(data['anomaly_score'].max()):.1f}/100"
+        if "anomaly_score" in data.columns else "N/A"
+    )
+
+with insight_cols[1]:
+    st.metric(
+        "AI Confidence",
+        f"{float(data['confidence'].max()):.1f}%"
+        if "confidence" in data.columns else "N/A"
+    )
+
+with insight_cols[2]:
+    st.metric(
+        "Active Sensors",
+        int(data["active_sensors"].max())
+        if "active_sensors" in data.columns else 0
+    )
+
+with insight_cols[3]:
+    st.metric(
+        "Primary Risk Sensor",
+        str(data["primary_risk_sensor"].iloc[-1])
+        if "primary_risk_sensor" in data.columns else "N/A"
+    )
+
+
+# ============================================================
+# AI ANOMALY EXPLANATION
+# ============================================================
+
+st.subheader("AI Anomaly Explanation")
+
+if "anomaly_score" in data.columns:
+
+    peak_index = data["anomaly_score"].idxmax()
+    peak_row = data.loc[peak_index]
+
+    sensor_values = {
+        "Pressure": float(peak_row["pressure_kpa_z"]),
+        "Temperature": float(peak_row["temperature_k_z"]),
+        "Vibration": float(peak_row["vibration_g_z"]),
+        "Thrust": float(peak_row["thrust_n_z"]),
+    }
+
+    top_sensor = max(
+        sensor_values,
+        key=sensor_values.get,
+    )
+
+    top_z = sensor_values[top_sensor]
+
+    if top_z >= 8:
+        explanation_level = "Severe"
+    elif top_z >= 4:
+        explanation_level = "High"
+    elif top_z >= 2:
+        explanation_level = "Moderate"
+    else:
+        explanation_level = "Low"
+
+    st.write(
+        f"**Primary Driver:** {top_sensor}"
+    )
+
+    st.write(
+        f"**Anomaly Severity:** {explanation_level}"
+    )
+
+    st.write(
+        f"**Peak Sensor Deviation:** {top_z:.2f}σ from phase baseline"
+    )
+
+    st.write(
+        f"**Detection Time:** {float(peak_row['time_s']):.2f} seconds"
+    )
+
+    st.info(
+        f"AI detected the strongest abnormal behavior in the "
+        f"{top_sensor} sensor during the {peak_row['phase']} phase. "
+        f"The sensor deviation reached {top_z:.2f}σ from its "
+        f"phase-specific baseline."
+    )
+
+else:
+
+    st.info("Advanced anomaly explanation is not available.")
+# ============================================================
 # AI ALERT TIMELINE
 # ============================================================
 

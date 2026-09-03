@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 import numpy as np
 from pathlib import Path
 
@@ -47,10 +47,24 @@ def build_phase_baseline(training):
 
 
 def detect(data, baseline):
+    """
+    Run phase-aware anomaly detection.
+
+    Adds:
+        - Per-sensor z-scores
+        - Persistent sensor alerts
+        - Active sensor count
+        - Mission status
+        - AI anomaly flag
+        - Overall anomaly score
+        - Confidence score
+        - Primary risk sensor
+    """
 
     result = data.copy()
 
     sensor_alerts = []
+    sensor_z_scores = {}
 
     for sensor in SENSORS:
 
@@ -59,6 +73,11 @@ def detect(data, baseline):
         for phase in data["phase"].unique():
 
             mask = data["phase"] == phase
+
+            if phase not in baseline:
+                raise ValueError(
+                    f"Unsupported phase '{phase}' in telemetry data."
+                )
 
             mean = baseline[phase][sensor]["mean"]
             std = baseline[phase][sensor]["std"]
@@ -70,6 +89,8 @@ def detect(data, baseline):
                 )
                 / (std + 1e-9)
             ).abs()
+
+        sensor_z_scores[sensor] = z_scores
 
         result[f"{sensor}_z"] = z_scores
 
@@ -87,13 +108,9 @@ def detect(data, baseline):
             .to_numpy()
         )
 
-        result[
-            f"{sensor}_alert"
-        ] = persistent
+        result[f"{sensor}_alert"] = persistent
 
-        sensor_alerts.append(
-            persistent
-        )
+        sensor_alerts.append(persistent)
 
     alert_matrix = np.column_stack(
         sensor_alerts
@@ -122,6 +139,81 @@ def detect(data, baseline):
     result["ai_anomaly"] = (
         result["status"] != "NORMAL"
     ).astype(int)
+
+    # --------------------------------------------------------
+    # Advanced anomaly score
+    # --------------------------------------------------------
+
+    z_matrix = np.column_stack(
+        [
+            sensor_z_scores[sensor]
+            for sensor in SENSORS
+        ]
+    )
+
+    max_z = z_matrix.max(axis=1)
+    anomaly_score = np.where(
+        result["status"] == "CRITICAL",
+        np.clip(
+            (max_z / 8.0) * 100.0,
+            0.0,
+            100.0,
+        ),
+        np.where(
+            result["status"] == "WARNING",
+            np.clip(
+                (max_z / 8.0) * 70.0,
+                0.0,
+                100.0,
+            ),
+            np.clip(
+                (max_z / 8.0) * 20.0,
+                0.0,
+                100.0,
+            ),
+        ),
+    )
+
+    result["anomaly_score"] = anomaly_score
+
+    # --------------------------------------------------------
+    # Confidence score
+    # --------------------------------------------------------
+
+    confidence = np.where(
+        result["ai_anomaly"] == 1,
+        np.clip(
+            60.0
+            + (active_sensors * 10.0)
+            + (max_z * 4.0),
+            0.0,
+            99.0,
+        ),
+        np.clip(
+            100.0 - (max_z * 4.0),
+            1.0,
+            95.0,
+        ),
+    )
+
+    result["confidence"] = confidence
+
+    # --------------------------------------------------------
+    # Primary risk sensor
+    # --------------------------------------------------------
+
+    primary_sensor_index = (
+        z_matrix.argmax(axis=1)
+    )
+
+    primary_sensors = [
+        SENSORS[index]
+        for index in primary_sensor_index
+    ]
+
+    result["primary_risk_sensor"] = (
+        primary_sensors
+    )
 
     return result
 
@@ -223,7 +315,7 @@ def main():
     )
 
     print(
-        "\nRocket Guardian AI — V11"
+        "\nRocket Guardian AI â€” V11"
     )
     print(
         "========================="
@@ -268,8 +360,30 @@ def main():
             analyzed
         )
 
-        result["dataset"] = file.stem
+        result["anomaly_score"] = float(
+            analyzed["anomaly_score"].max()
+        )
 
+        result["confidence"] = float(
+            analyzed["confidence"].max()
+        )
+
+        primary_sensor_counts = (
+            analyzed.loc[
+                analyzed["ai_anomaly"] == 1,
+                "primary_risk_sensor"
+            ]
+            .value_counts()
+        )
+
+        if not primary_sensor_counts.empty:
+            result["primary_risk_sensor"] = (
+                primary_sensor_counts.index[0]
+            )
+        else:
+            result["primary_risk_sensor"] = "None"
+
+        result["dataset"] = file.stem
         results.append(result)
 
         analyzed.to_csv(
@@ -288,6 +402,9 @@ def main():
             "samples",
             "actual_anomalies",
             "detected_anomalies",
+            "anomaly_score",
+            "confidence",
+            "primary_risk_sensor",
             "precision",
             "recall",
             "f1_score",
@@ -301,6 +418,10 @@ def main():
         results_df.to_string(
             index=False,
             formatters={
+                "anomaly_score":
+                    "{:.1f}".format,
+                "confidence":
+                    "{:.1f}".format,
                 "precision":
                     "{:.3f}".format,
                 "recall":
@@ -334,3 +455,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
