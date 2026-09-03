@@ -1151,7 +1151,7 @@ with insight_cols[2]:
 with insight_cols[3]:
     st.metric(
         "Primary Risk Sensor",
-        ({"vibration_g":"Vibration","pressure_kpa":"Pressure","temperature_k":"Temperature","thrust_n":"Thrust"}.get({"vibration_g":"Vibration","pressure_kpa":"Pressure","temperature_k":"Temperature","thrust_n":"Thrust"}.get(str(data["primary_risk_sensor"].iloc[-1]), str(data["primary_risk_sensor"].iloc[-1])), {"vibration_g":"Vibration","pressure_kpa":"Pressure","temperature_k":"Temperature","thrust_n":"Thrust"}.get(str(data["primary_risk_sensor"].iloc[-1]), str(data["primary_risk_sensor"].iloc[-1]))))
+        {"vibration_g":"Vibration","pressure_kpa":"Pressure","temperature_k":"Temperature","thrust_n":"Thrust"}.get(str(data["primary_risk_sensor"].iloc[-1]), str(data["primary_risk_sensor"].iloc[-1]))
         if "primary_risk_sensor" in data.columns else "N/A"
     )
 
@@ -2282,6 +2282,9 @@ st.caption(
 "Synthetic telemetry / customer-provided telemetry\n"
 "Not for flight-critical use"
 )
+
+
+
 
 
 
