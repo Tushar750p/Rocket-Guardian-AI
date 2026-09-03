@@ -1199,7 +1199,7 @@ if "anomaly_score" in data.columns:
     )
 
     st.write(
-        f"**Peak Sensor Deviation:** {top_z:.2f}s from phase baseline"
+        f"**Peak Sensor Deviation:** {top_z:.2f}σ from phase baseline"
     )
 
     st.write(
@@ -2282,6 +2282,8 @@ st.caption(
 "Synthetic telemetry / customer-provided telemetry\n"
 "Not for flight-critical use"
 )
+
+
 
 
 
