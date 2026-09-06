@@ -44,7 +44,7 @@ st.set_page_config(
     layout="wide",
 )
 
-initialize_database()
+_initialize_database_cached()
 
 # ============================================================
 # AUTHENTICATION
@@ -89,6 +89,37 @@ RISK_FILES = {
 # ============================================================
 # SENSOR CONFIGURATION
 # ============================================================
+
+# ============================================================
+# PERFORMANCE CACHE HELPERS
+# ============================================================
+
+@st.cache_resource(show_spinner=False)
+def _initialize_database_cached():
+    initialize_database()
+
+
+@st.cache_data(show_spinner=False)
+def _read_csv_cached(file_path: str):
+    return pd.read_csv(file_path)
+
+
+@st.cache_data(show_spinner=False)
+def _analyze_telemetry_cached(uploaded_bytes: bytes):
+    fd, temp_path = tempfile.mkstemp(suffix=".csv")
+    try:
+        with os.fdopen(fd, "wb") as temp_file:
+            temp_file.write(uploaded_bytes)
+        return analyze_telemetry(temp_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@st.cache_data(show_spinner=False)
+def _analyze_risk_cached(frame):
+    return analyze_risk(frame)
+
 
 SENSORS = {
     "Pressure": {
@@ -456,9 +487,7 @@ if customer_mode:
                     uploaded_bytes
                 )
 
-            data = analyze_telemetry(
-                temp_path
-            )
+            data = _analyze_telemetry_cached(uploaded_bytes)
 
         finally:
 
@@ -501,9 +530,7 @@ else:
 
         st.stop()
 
-    data = pd.read_csv(
-        file_path
-    )
+    data = _read_csv_cached(str(file_path))
    
 
 # ============================================================
@@ -514,9 +541,7 @@ if customer_mode:
 
     try:
 
-        risk_data = analyze_risk(
-            data
-        )
+        risk_data = _analyze_risk_cached(data)
 
         # ----------------------------------------------------
         # Save customer analysis to database
@@ -717,9 +742,7 @@ else:
 
     if risk_file.exists():
 
-        risk_data = pd.read_csv(
-            risk_file
-        )
+        risk_data = _read_csv_cached(str(risk_file))
 
     else:
 
