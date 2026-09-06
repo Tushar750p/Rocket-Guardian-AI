@@ -5,18 +5,22 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   optimize:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Optimize Streamlit dashboard caching
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           path = Path("src/dashboard.py")
           text = path.read_text(encoding="utf-8")
@@ -29,11 +33,8 @@ jobs:
               text = text[:insert_at] + helpers + text[insert_at:]
 
           text = text.replace("initialize_database()\n\n# ============================================================\n# AUTHENTICATION", "_initialize_database_cached()\n\n# ============================================================\n# AUTHENTICATION", 1)
-
           text = text.replace("data = analyze_telemetry(\n                temp_path\n            )", "data = _analyze_telemetry_cached(uploaded_bytes)", 1)
-
           text = text.replace("risk_data = analyze_risk(\n            data\n        )", "risk_data = _analyze_risk_cached(data)", 1)
-
           text = text.replace("data = pd.read_csv(\n        file_path\n    )", "data = _read_csv_cached(str(file_path))", 1)
           text = text.replace("risk_data = pd.read_csv(\n            risk_file\n        )", "risk_data = _read_csv_cached(str(risk_file))", 1)
 
@@ -47,10 +48,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/dashboard.py .github/workflows/optimize-performance.yml
+          git add src/dashboard.py
           if git diff --cached --quiet; then
             echo "No optimization changes needed."
           else
             git commit -m "Optimize dashboard performance"
-            git push
+            git push origin HEAD:main
           fi
