@@ -70,6 +70,11 @@ def generate_live_telemetry(now: float | None = None, samples: int = 600) -> pd.
     ).sort_values("time_s", ignore_index=True)
 
 
+def score_live_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Run the same trained phase-aware detector on external live data."""
+    return detect(frame, _live_baseline())
+
+
 def analyze_live_telemetry(now: float | None = None) -> pd.DataFrame:
-    """Generate and score the current live telemetry window."""
-    return detect(generate_live_telemetry(now=now), _live_baseline())
+    """Generate and score the current simulated live telemetry window."""
+    return score_live_frame(generate_live_telemetry(now=now))
