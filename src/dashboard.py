@@ -603,26 +603,60 @@ if live_mode:
     live_agents = MissionAgent.run(risk_data)
 
     st.markdown("### Live AI Agent Console")
+
     agent_cols = st.columns(3)
     with agent_cols[0]:
         st.metric(
             "Anomaly Agent",
             live_agents["anomaly"]["status"],
-            f"{live_agents["anomaly"]["detections"]} detections",
+            f'{live_agents["anomaly"]["detections"]} detections',
         )
     with agent_cols[1]:
         st.metric(
             "Sensor Agent",
             live_agents["sensor"]["top_sensor"],
-            f"{live_agents["sensor"]["top_risk"]:.1f} risk",
+            f'{live_agents["sensor"]["top_risk"]:.1f} risk',
         )
     with agent_cols[2]:
         st.metric(
+            "Trend Agent",
+            live_agents["trend"]["direction"],
+            f'{live_agents["trend"]["recent_risk"]:.1f} recent risk',
+        )
+
+    agent_cols_2 = st.columns(3)
+    with agent_cols_2[0]:
+        st.metric(
+            "Telemetry Health",
+            live_agents["telemetry"]["status"],
+            f'{live_agents["telemetry"]["quality"]}% quality',
+        )
+    with agent_cols_2[1]:
+        st.metric(
             "Mission Agent",
             live_agents["mission"]["mission_state"],
-            f"Peak {live_agents["mission"]["peak_time_s"]:.2f}s",
+            f'Peak {live_agents["mission"]["peak_time_s"]:.2f}s',
         )
+    with agent_cols_2[2]:
+        incident_state = "ACTIVE" if live_agents["incident"]["active"] else "CLEAR"
+        st.metric(
+            "Incident Agent",
+            incident_state,
+            f'{live_agents["incident"]["event_count"]} event(s)',
+        )
+
     st.info(live_agents["mission"]["recommendation"])
+
+    with st.expander("Agent details", expanded=False):
+        st.write({
+            "Anomaly": live_agents["anomaly"],
+            "Sensor": live_agents["sensor"],
+            "Trend": live_agents["trend"],
+            "Telemetry": live_agents["telemetry"],
+            "Mission": live_agents["mission"],
+            "Incident": live_agents["incident"],
+            "Generated at": live_agents["generated_at"],
+        })
 
 elif customer_mode:
 
