@@ -1,0 +1,191 @@
+"""Professional ReportLab theme for Rocket Guardian AI customer reports.
+
+The dashboard imports ReportLab after importing ``src.risk_analysis``.
+This module safely decorates the ReportLab classes/functions used by the
+customer report so the existing report-generation flow gets a more polished
+layout without changing the dashboard logic.
+"""
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet as _original_get_styles
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    BaseDocTemplate as _BaseDocTemplate,
+    Frame,
+    PageTemplate,
+    Paragraph as _OriginalParagraph,
+    SimpleDocTemplate as _OriginalSimpleDocTemplate,
+)
+
+
+_PALETTE = {
+    "navy": colors.HexColor("#0F172A"),
+    "slate": colors.HexColor("#475569"),
+    "line": colors.HexColor("#CBD5E1"),
+    "soft": colors.HexColor("#F8FAFC"),
+    "accent": colors.HexColor("#2563EB"),
+}
+
+
+class _ProfessionalDocTemplate(_OriginalSimpleDocTemplate):
+    """SimpleDocTemplate with a header, footer and document metadata."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.title = "Rocket Guardian AI - Telemetry Analysis Report"
+        self.author = "Rocket Guardian AI"
+        self.subject = "Customer telemetry risk analysis"
+
+    def build(self, flowables, *args, **kwargs):
+        def draw_page(canvas, document):
+            canvas.saveState()
+            width, height = document.pagesize
+
+            # Header rule and brand.
+            canvas.setStrokeColor(_PALETTE["line"])
+            canvas.setLineWidth(0.6)
+            canvas.line(document.leftMargin, height - 18 * mm,
+                        width - document.rightMargin, height - 18 * mm)
+            canvas.setFillColor(_PALETTE["navy"])
+            canvas.setFont("Helvetica-Bold", 9)
+            canvas.drawString(document.leftMargin, height - 13 * mm, "ROCKET GUARDIAN AI")
+            canvas.setFillColor(_PALETTE["slate"])
+            canvas.setFont("Helvetica", 8)
+            canvas.drawRightString(
+                width - document.rightMargin,
+                height - 13 * mm,
+                "TELEMETRY ANALYSIS REPORT",
+            )
+
+            # Footer.
+            canvas.setStrokeColor(_PALETTE["line"])
+            canvas.line(document.leftMargin, 17 * mm,
+                        width - document.rightMargin, 17 * mm)
+            canvas.setFillColor(_PALETTE["slate"])
+            canvas.setFont("Helvetica", 7.5)
+            canvas.drawString(
+                document.leftMargin,
+                11 * mm,
+                "Research Prototype - Not for flight-critical use",
+            )
+            canvas.drawRightString(
+                width - document.rightMargin,
+                11 * mm,
+                f"Page {doc_page_number(canvas)}",
+            )
+            canvas.restoreState()
+
+        def doc_page_number(canvas):
+            return canvas.getPageNumber()
+
+        super().build(flowables, onFirstPage=draw_page, onLaterPages=draw_page, *args, **kwargs)
+
+
+class _ProfessionalStyles:
+    """Proxy style sheet retaining standard names used by the dashboard."""
+
+    def __init__(self):
+        styles = _original_get_styles()
+        self.styles = styles
+
+        self.title = styles["Title"]
+        self.title.fontName = "Helvetica-Bold"
+        self.title.fontSize = 22
+        self.title.leading = 26
+        self.title.textColor = _PALETTE["navy"]
+        self.title.alignment = TA_CENTER
+        self.title.spaceAfter = 10
+
+        self.heading2 = styles["Heading2"]
+        self.heading2.fontName = "Helvetica-Bold"
+        self.heading2.fontSize = 13
+        self.heading2.leading = 16
+        self.heading2.textColor = _PALETTE["navy"]
+        self.heading2.spaceBefore = 8
+        self.heading2.spaceAfter = 8
+
+        body = styles["BodyText"]
+        body.fontName = "Helvetica"
+        body.fontSize = 9
+        body.leading = 13
+        body.textColor = colors.HexColor("#1E293B")
+        body.spaceAfter = 4
+
+        self.section = ParagraphStyle(
+            "RGSection",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=10.5,
+            leading=13,
+            textColor=_PALETTE["accent"],
+            spaceBefore=10,
+            spaceAfter=5,
+        )
+
+        self.metric = ParagraphStyle(
+            "RGMetric",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=9.5,
+            leading=13,
+            textColor=_PALETTE["navy"],
+            backColor=_PALETTE["soft"],
+            borderColor=_PALETTE["line"],
+            borderWidth=0.5,
+            borderPadding=6,
+            spaceBefore=2,
+            spaceAfter=4,
+        )
+
+        self.small = ParagraphStyle(
+            "RGSmall",
+            parent=body,
+            fontSize=8,
+            leading=11,
+            textColor=_PALETTE["slate"],
+        )
+
+    def __getitem__(self, key):
+        if key == "Title":
+            return self.title
+        if key == "Heading2":
+            return self.heading2
+        if key == "BodyText":
+            return self.styles["BodyText"]
+        return self.styles[key]
+
+
+def _professional_get_stylesheet():
+    return _ProfessionalStyles()
+
+
+# Detect report content and assign a better style automatically while keeping
+# the dashboard's existing simple Paragraph calls unchanged.
+def _professional_paragraph(text, style=None, *args, **kwargs):
+    raw = str(text).strip()
+    styles = _ProfessionalStyles()
+
+    if raw in {
+        "MISSION SUMMARY",
+        "RISK ASSESSMENT",
+        "SENSOR RISK",
+        "PEAK RISK EVENT",
+        "EXPLANATION",
+    }:
+        style = styles.section
+    elif raw.startswith("Rocket Guardian AI - Research Prototype"):
+        style = styles.small
+    elif raw.startswith("Ground-truth anomaly labels") or raw.startswith("AI detections are based"):
+        style = styles.small
+
+    return _OriginalParagraph(text, style, *args, **kwargs)
+
+
+# Patch the module attributes before dashboard imports them.
+import reportlab.platypus as _platypus
+import reportlab.lib.styles as _styles_module
+
+_platypus.SimpleDocTemplate = _ProfessionalDocTemplate
+_platypus.Paragraph = _professional_paragraph
+_styles_module.getSampleStyleSheet = _professional_get_stylesheet
