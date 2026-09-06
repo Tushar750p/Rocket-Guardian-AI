@@ -7,17 +7,14 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 
-# Preserve the true ReportLab objects exactly once.  Streamlit can reload
-# modules between reruns; without these sentinels a reload would capture our
-# own patched Paragraph class and recurse forever.
-if not hasattr(_platypus, "_rg_original_paragraph"):
-    _platypus._rg_original_paragraph = _platypus.Paragraph
+# Preserve the true ReportLab objects exactly once where possible. Streamlit
+# can reload modules between reruns, so the wrappers below must never call a
+# previously wrapped Paragraph function.
 if not hasattr(_platypus, "_rg_original_simple_doc_template"):
     _platypus._rg_original_simple_doc_template = _platypus.SimpleDocTemplate
 if not hasattr(_styles_module, "_rg_original_get_sample_styles"):
     _styles_module._rg_original_get_sample_styles = _styles_module.getSampleStyleSheet
 
-_OriginalParagraph = _platypus._rg_original_paragraph
 _OriginalSimpleDocTemplate = _platypus._rg_original_simple_doc_template
 _original_get_styles = _styles_module._rg_original_get_sample_styles
 
@@ -195,11 +192,15 @@ def _professional_paragraph(text, style=None, *args, **kwargs):
     elif raw.startswith("Ground-truth anomaly labels") or raw.startswith("AI detections are based"):
         style = styles.small
 
-    return _OriginalParagraph(text, style, *args, **kwargs)
+    # Import the native Paragraph class directly from ReportLab's paragraph
+    # module. This bypasses the patched platypus.Paragraph attribute and is
+    # therefore safe even after repeated Streamlit reloads.
+    from reportlab.platypus.paragraph import Paragraph as NativeParagraph
+    return NativeParagraph(text, style, *args, **kwargs)
 
 
-# Patch only the public module attributes. The original objects are retained
-# above so subsequent Streamlit reloads remain safe and non-recursive.
+# Patch only the public module attributes. The native Paragraph class itself
+# is never stored from a potentially patched module attribute.
 _platypus.SimpleDocTemplate = _ProfessionalDocTemplate
 _platypus.Paragraph = _professional_paragraph
 _styles_module.getSampleStyleSheet = _professional_get_stylesheet
