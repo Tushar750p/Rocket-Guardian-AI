@@ -95,3 +95,8 @@ def summarize_risk(data):
             peak["risk_explanation"]
         ),
     }
+
+
+# Load the report presentation theme before dashboard imports ReportLab.
+# This keeps report styling separate from the analysis logic.
+import src.report_theme  # noqa: F401,E402
