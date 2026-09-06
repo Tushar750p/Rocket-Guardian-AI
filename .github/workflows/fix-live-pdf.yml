@@ -17,32 +17,50 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fix live PDF paragraph expression
+      - name: Fix live PDF generation safely
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           path = Path("src/dashboard.py")
           text = path.read_text(encoding="utf-8")
-          broken = " </b>. '<\n        f'<b>"
-          fixed = " </b>. '\n        f'<b>"
-          if broken not in text:
-              print("Live PDF expression already fixed or not present.")
-          else:
-              path.write_text(text.replace(broken, fixed, 1), encoding="utf-8")
-              print("Fixed live PDF Paragraph string comparison bug.")
 
-      - name: Validate Python files
+          pattern = re.compile(
+              r'''\n\s*live_story\.append\(Paragraph\(\n\s*f'Peak system risk was <b>\{float\(peak\["overall_risk"\]\):\.1f\}/100</b> at <b>\{float\(peak\["time_s"\]\):\.2f\} s</b>\. '<\n\s*f'<b>\{peak\["primary_risk_sensor"\]\}</b> was the primary risk sensor\.',\n\s*live_body,\n\s*\)''',
+              re.MULTILINE,
+          )
+
+          replacement = '''
+    peak_time = float(peak["time_s"])
+    peak_risk_value = float(peak["overall_risk"])
+    peak_sensor = str(peak["primary_risk_sensor"])
+    peak_text = (
+        "Peak system risk was "
+        f"<b>{peak_risk_value:.1f}/100</b> "
+        f"at <b>{peak_time:.2f} s</b>. "
+        f"<b>{peak_sensor}</b> was the primary risk sensor."
+    )
+    live_story.append(Paragraph(peak_text, live_body))'''
+
+          text, count = pattern.subn(replacement, text, count=1)
+          if count:
+              path.write_text(text, encoding="utf-8")
+              print("Fixed live PDF paragraph expression.")
+          else:
+              print("No matching broken expression found; checking syntax only.")
+
+      - name: Validate Python
         run: python -m compileall -q src
 
-      - name: Commit fix
+      - name: Commit verified fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/dashboard.py
           if git diff --cached --quiet; then
-            echo "No fix needed."
+            echo "No dashboard change required."
           else
-            git commit -m "Fix live mission PDF report"
+            git commit -m "Fix live mission PDF generation"
             git push origin HEAD:main
           fi
