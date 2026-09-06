@@ -909,6 +909,39 @@ else:
 
 
 # ============================================================
+# CUSTOMER MISSION HISTORY
+# ============================================================
+
+if customer_mode:
+    st.divider()
+    st.subheader("Customer Mission History")
+    try:
+        history_customer = get_customer_by_auth_user_id(current_user.id)
+        if history_customer is not None:
+            history_rows = get_customer_mission_history(int(history_customer["id"]))
+            history_items = []
+            for row in history_rows:
+                history_items.append({
+                    "Mission": row["mission_name"],
+                    "File": row["source_filename"] or "-",
+                    "Samples": row["sample_count"] if row["sample_count"] is not None else "-",
+                    "AI Detections": row["ai_detection_count"] if row["ai_detection_count"] is not None else "-",
+                    "Risk": f'{float(row["overall_risk"]):.1f}/100' if row["overall_risk"] is not None else "-",
+                    "Status": row["risk_level"] or "-",
+                    "Primary Sensor": row["primary_risk_sensor"] or "-",
+                    "Peak Time (s)": f'{float(row["peak_time_s"]):.2f}' if row["peak_time_s"] is not None else "-",
+                    "Saved At": str(row["run_created_at"] or row["mission_created_at"]),
+                })
+            if history_items:
+                st.dataframe(pd.DataFrame(history_items), width="stretch", hide_index=True)
+            else:
+                st.info("No saved mission history yet.")
+        else:
+            st.info("Mission history will appear after the first saved analysis.")
+    except Exception as exc:
+        st.warning(f"Mission history unavailable: {exc}")
+
+# ============================================================
 # OVERALL SYSTEM STATUS
 # ============================================================
 
