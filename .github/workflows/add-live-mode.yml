@@ -1,0 +1,71 @@
+name: Add Live Mission Mode
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  live-mode:
+    if: ${{ !contains(github.event.head_commit.message, 'Add live mission mode') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add live mission dashboard mode
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/dashboard.py')
+          text = path.read_text(encoding='utf-8')
+
+          if 'from streamlit_autorefresh import st_autorefresh' not in text:
+              text = text.replace('import tempfile\n', 'import tempfile\nimport time\n\nfrom streamlit_autorefresh import st_autorefresh\n', 1)
+
+          if 'from src.live_telemetry import analyze_live_telemetry' not in text:
+              text = text.replace('from src.telemetry_analysis import analyze_telemetry\n', 'from src.telemetry_analysis import analyze_telemetry\nfrom src.live_telemetry import analyze_live_telemetry\n', 1)
+
+          if '@st.cache_data(show_spinner=False)\ndef _analyze_live_telemetry_cached' not in text:
+              anchor = '@st.cache_data(show_spinner=False)\ndef _analyze_risk_cached(frame):'
+              helper = '@st.cache_data(ttl=1, show_spinner=False)\ndef _analyze_live_telemetry_cached(tick: int):\n    return analyze_live_telemetry(float(tick))\n\n\n'
+              text = text.replace(anchor, helper + anchor, 1)
+
+          if '"Live Mission"' not in text:
+              text = text.replace('        "Demo Mission",\n        "Customer Upload",', '        "Demo Mission",\n        "Live Mission",\n        "Customer Upload",', 1)
+
+          old = '''if analysis_mode == "Demo Mission":\n\n    st.sidebar.subheader("Demo Mission")\n\n    selected = st.sidebar.selectbox(\n        "Test Scenario",\n        list(SCENARIOS.keys()),\n    )\n\n    uploaded_file = None\n\n# ============================================================\n# CUSTOMER UPLOAD MODE\n# ============================================================\n\nelse:\n'''
+          new = '''if analysis_mode == "Demo Mission":\n\n    st.sidebar.subheader("Demo Mission")\n\n    selected = st.sidebar.selectbox(\n        "Test Scenario",\n        list(SCENARIOS.keys()),\n    )\n\n    uploaded_file = None\n\nelif analysis_mode == "Live Mission":\n\n    st.sidebar.subheader("Live Mission")\n    refresh_seconds = st.sidebar.slider(\n        "Update interval (seconds)",\n        min_value=1,\n        max_value=5,\n        value=2,\n    )\n    st_autorefresh(\n        interval=refresh_seconds * 1000,\n        key="rocket_guardian_live_refresh",\n    )\n    st.sidebar.success("LIVE telemetry stream active")\n    st.sidebar.caption("Software-simulated live telemetry")\n    selected = "Combined Failure"\n    uploaded_file = None\n\n# ============================================================\n# CUSTOMER UPLOAD MODE\n# ============================================================\n\nelse:\n'''
+          if old not in text:
+              raise SystemExit('Mode block not found')
+          text = text.replace(old, new, 1)
+
+          text = text.replace('customer_mode = analysis_mode == "Customer Upload"\n\nif customer_mode:', 'customer_mode = analysis_mode == "Customer Upload"\nlive_mode = analysis_mode == "Live Mission"\n\nif live_mode:\n\n    live_tick = int(time.time())\n    data = _analyze_live_telemetry_cached(live_tick)\n\nelif customer_mode:', 1)
+
+          text = text.replace('if customer_mode:\n\n    try:\n\n        risk_data = _analyze_risk_cached(data)', 'if live_mode:\n\n    risk_data = _analyze_risk_cached(data)\n\nelif customer_mode:\n\n    try:\n\n        risk_data = _analyze_risk_cached(data)', 1)
+
+          # The database-save section is only valid for uploaded files.
+          text = text.replace('        source_filename = uploaded_file.name', '        source_filename = uploaded_file.name', 1)
+
+          # Fix the database initializer call being above its definition.
+          text = text.replace('_initialize_database_cached()\n\n# ============================================================\n# AUTHENTICATION', '# ============================================================\n# AUTHENTICATION', 1)
+          text = text.replace('def _analyze_risk_cached(frame):\n    return analyze_risk(frame)\n\n\nSENSORS = {', 'def _analyze_risk_cached(frame):\n    return analyze_risk(frame)\n\n\n_initialize_database_cached()\n\nSENSORS = {', 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('Live Mission mode added.')
+
+      - name: Validate dashboard
+        run: python -m compileall -q src
+
+      - name: Commit live mode
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dashboard.py
+          git commit -m "Add live mission mode"
+          git push origin HEAD:main
