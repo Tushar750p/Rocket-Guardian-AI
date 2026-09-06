@@ -1,0 +1,58 @@
+name: Fix Live PDF v2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix live PDF construction
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path("src/dashboard.py")
+          text = path.read_text(encoding="utf-8")
+
+          pattern = re.compile(
+              r"\s*live_story\.append\(Paragraph\(\s*"
+              r"f'Peak system risk was <b>\{float\(peak\[\"overall_risk\"\]\):\.1f\}/100</b> at <b>\{float\(peak\[\"time_s\"\]\):\.2f\} s</b>\. '<\n\s*"
+              r"f'<b>\{peak\[\"primary_risk_sensor\"\]\}</b> was the primary risk sensor\.',\s*"
+              r"live_body,\s*\)"
+          )
+
+          replacement = '''\n    live_story.append(Paragraph(\n        f'Peak system risk was <b>{float(peak["overall_risk"]):.1f}/100</b> at <b>{float(peak["time_s"]):.2f} s</b>. '\n        f'<b>{peak["primary_risk_sensor"]}</b> was the primary risk sensor.',\n        live_body,\n    ))'''
+
+          text2, count = pattern.subn(replacement, text, count=1)
+          if count:
+              path.write_text(text2, encoding="utf-8")
+              print("Fixed broken live PDF Paragraph expression.")
+          else:
+              print("No broken live PDF expression matched.")
+
+      - name: Validate
+        run: python -m compileall -q src
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dashboard.py
+          if git diff --cached --quiet; then
+            echo "No changes needed."
+          else
+            git commit -m "Fix live PDF paragraph syntax"
+            git push origin HEAD:main
+          fi
