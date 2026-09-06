@@ -1,0 +1,58 @@
+name: Finalize Dashboard
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add mission history
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/dashboard.py")
+          text = path.read_text(encoding="utf-8")
+
+          if "    get_customer_mission_history," not in text:
+              anchor = "    get_customer_by_auth_user_id,\n"
+              if anchor not in text:
+                  raise SystemExit("Database import anchor not found")
+              text = text.replace(anchor, anchor + "    get_customer_mission_history,\n", 1)
+
+          if "# MISSION HISTORY\n# ============================================================" not in text:
+              anchor = "# ============================================================\n# OVERALL SYSTEM STATUS\n# ============================================================\n"
+              if anchor not in text:
+                  raise SystemExit("Overall system status anchor not found")
+
+              history = '''# ============================================================\n# MISSION HISTORY\n# ============================================================\n\nif customer_mode:\n    st.divider()\n    st.subheader("Mission History")\n    try:\n        history_customer = get_customer_by_auth_user_id(current_user.id)\n        if history_customer is not None:\n            history_rows = get_customer_mission_history(int(history_customer["id"]))\n            history_items = []\n            for row in history_rows:\n                history_items.append({\n                    "Mission": row["mission_name"],\n                    "File": row["source_filename"] or "-",\n                    "Samples": row["sample_count"] if row["sample_count"] is not None else "-",\n                    "AI Detections": row["ai_detection_count"] if row["ai_detection_count"] is not None else "-",\n                    "Risk": f'{float(row["overall_risk"]):.1f}/100' if row["overall_risk"] is not None else "-",\n                    "Status": row["risk_level"] or "-",\n                    "Primary Sensor": row["primary_risk_sensor"] or "-",\n                    "Peak Time (s)": f'{float(row["peak_time_s"]):.2f}' if row["peak_time_s"] is not None else "-",\n                    "Saved At": str(row["run_created_at"] or row["mission_created_at"]),\n                })\n            if history_items:\n                st.dataframe(pd.DataFrame(history_items), width="stretch", hide_index=True)\n            else:\n                st.info("No saved mission history yet.")\n        else:\n            st.info("Mission history will appear after the first saved analysis.")\n    except Exception as exc:\n        st.warning(f"Mission history unavailable: {exc}")\n\n'''
+              text = text.replace(anchor, history + anchor, 1)
+
+          path.write_text(text, encoding="utf-8")
+          print("Mission history finalized.")
+
+      - name: Validate
+        run: python -m compileall -q src
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dashboard.py
+          if git diff --cached --quiet; then
+            echo "No changes needed."
+          else
+            git commit -m "Add customer mission history"
+            git push origin HEAD:main
+          fi
