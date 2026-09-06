@@ -5,6 +5,9 @@ from pathlib import Path
 import os
 import sys
 import tempfile
+import time
+
+from streamlit_autorefresh import st_autorefresh
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
@@ -12,6 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.telemetry_analysis import analyze_telemetry
+from src.live_telemetry import analyze_live_telemetry
 from src.risk_analysis import analyze_risk, summarize_risk
 from src.database import (
     create_customer,
@@ -43,8 +47,6 @@ st.set_page_config(
     page_icon="[ROCKET]",
     layout="wide",
 )
-
-_initialize_database_cached()
 
 # ============================================================
 # AUTHENTICATION
@@ -116,10 +118,17 @@ def _analyze_telemetry_cached(uploaded_bytes: bytes):
             os.remove(temp_path)
 
 
+@st.cache_data(ttl=1, show_spinner=False)
+def _analyze_live_telemetry_cached(tick: int):
+    return analyze_live_telemetry(float(tick))
+
+
 @st.cache_data(show_spinner=False)
 def _analyze_risk_cached(frame):
     return analyze_risk(frame)
 
+
+_initialize_database_cached()
 
 SENSORS = {
     "Pressure": {
@@ -257,6 +266,7 @@ analysis_mode = st.sidebar.radio(
     "Analysis Mode",
     [
         "Demo Mission",
+        "Live Mission",
         "Customer Upload",
     ],
 )
@@ -277,6 +287,24 @@ if analysis_mode == "Demo Mission":
         list(SCENARIOS.keys()),
     )
 
+    uploaded_file = None
+
+elif analysis_mode == "Live Mission":
+
+    st.sidebar.subheader("Live Mission")
+    refresh_seconds = st.sidebar.slider(
+        "Update interval (seconds)",
+        min_value=1,
+        max_value=5,
+        value=2,
+    )
+    st_autorefresh(
+        interval=refresh_seconds * 1000,
+        key="rocket_guardian_live_refresh",
+    )
+    st.sidebar.success("LIVE telemetry stream active")
+    st.sidebar.caption("Software-simulated live telemetry")
+    selected = "Combined Failure"
     uploaded_file = None
 
 # ============================================================
@@ -323,8 +351,14 @@ else:
 # LOAD TELEMETRY DATA
 # ============================================================
 customer_mode = analysis_mode == "Customer Upload"
+live_mode = analysis_mode == "Live Mission"
 
-if customer_mode:
+if live_mode:
+
+    live_tick = int(time.time())
+    data = _analyze_live_telemetry_cached(live_tick)
+
+elif customer_mode:
 
     if uploaded_file is None:
 
@@ -537,7 +571,11 @@ else:
 # LOAD V14 RISK DATA
 # ============================================================
 
-if customer_mode:
+if live_mode:
+
+    risk_data = _analyze_risk_cached(data)
+
+elif customer_mode:
 
     try:
 
