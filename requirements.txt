@@ -8,3 +8,4 @@ psycopg[binary]==3.3.5
 SQLAlchemy==2.0.52
 supabase
 streamlit-autorefresh
+# Live Mission mode enabled
