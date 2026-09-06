@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Add mission history
+      - name: Add customer mission history
         shell: python
         run: |
           from pathlib import Path
@@ -31,16 +31,17 @@ jobs:
                   raise SystemExit("Database import anchor not found")
               text = text.replace(anchor, anchor + "    get_customer_mission_history,\n", 1)
 
-          if 'st.subheader("Mission History")' not in text:
+          marker = 'st.subheader("Customer Mission History")'
+          if marker not in text:
               anchor = "# ============================================================\n# OVERALL SYSTEM STATUS\n# ============================================================\n"
               if anchor not in text:
                   raise SystemExit("Overall system status anchor not found")
 
-              history = '''# ============================================================\n# MISSION HISTORY\n# ============================================================\n\nif customer_mode:\n    st.divider()\n    st.subheader("Mission History")\n    try:\n        history_customer = get_customer_by_auth_user_id(current_user.id)\n        if history_customer is not None:\n            history_rows = get_customer_mission_history(int(history_customer["id"]))\n            history_items = []\n            for row in history_rows:\n                history_items.append({\n                    "Mission": row["mission_name"],\n                    "File": row["source_filename"] or "-",\n                    "Samples": row["sample_count"] if row["sample_count"] is not None else "-",\n                    "AI Detections": row["ai_detection_count"] if row["ai_detection_count"] is not None else "-",\n                    "Risk": f'{float(row["overall_risk"]):.1f}/100' if row["overall_risk"] is not None else "-",\n                    "Status": row["risk_level"] or "-",\n                    "Primary Sensor": row["primary_risk_sensor"] or "-",\n                    "Peak Time (s)": f'{float(row["peak_time_s"]):.2f}' if row["peak_time_s"] is not None else "-",\n                    "Saved At": str(row["run_created_at"] or row["mission_created_at"]),\n                })\n            if history_items:\n                st.dataframe(pd.DataFrame(history_items), width="stretch", hide_index=True)\n            else:\n                st.info("No saved mission history yet.")\n        else:\n            st.info("Mission history will appear after the first saved analysis.")\n    except Exception as exc:\n        st.warning(f"Mission history unavailable: {exc}")\n\n'''
+              history = '''# ============================================================\n# CUSTOMER MISSION HISTORY\n# ============================================================\n\nif customer_mode:\n    st.divider()\n    st.subheader("Customer Mission History")\n    try:\n        history_customer = get_customer_by_auth_user_id(current_user.id)\n        if history_customer is not None:\n            history_rows = get_customer_mission_history(int(history_customer["id"]))\n            history_items = []\n            for row in history_rows:\n                history_items.append({\n                    "Mission": row["mission_name"],\n                    "File": row["source_filename"] or "-",\n                    "Samples": row["sample_count"] if row["sample_count"] is not None else "-",\n                    "AI Detections": row["ai_detection_count"] if row["ai_detection_count"] is not None else "-",\n                    "Risk": f'{float(row["overall_risk"]):.1f}/100' if row["overall_risk"] is not None else "-",\n                    "Status": row["risk_level"] or "-",\n                    "Primary Sensor": row["primary_risk_sensor"] or "-",\n                    "Peak Time (s)": f'{float(row["peak_time_s"]):.2f}' if row["peak_time_s"] is not None else "-",\n                    "Saved At": str(row["run_created_at"] or row["mission_created_at"]),\n                })\n            if history_items:\n                st.dataframe(pd.DataFrame(history_items), width="stretch", hide_index=True)\n            else:\n                st.info("No saved mission history yet.")\n        else:\n            st.info("Mission history will appear after the first saved analysis.")\n    except Exception as exc:\n        st.warning(f"Mission history unavailable: {exc}")\n\n'''
               text = text.replace(anchor, history + anchor, 1)
 
           path.write_text(text, encoding="utf-8")
-          print("Mission history finalized.")
+          print("Customer mission history finalized.")
 
       - name: Validate
         run: python -m compileall -q src
