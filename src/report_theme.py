@@ -1,15 +1,25 @@
 """Professional ReportLab theme for Rocket Guardian AI customer reports."""
 
+import reportlab.platypus as _platypus
+import reportlab.lib.styles as _styles_module
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet as _original_get_styles
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import (
-    Frame,
-    PageTemplate,
-    Paragraph as _OriginalParagraph,
-    SimpleDocTemplate as _OriginalSimpleDocTemplate,
-)
+
+# Preserve the true ReportLab objects exactly once.  Streamlit can reload
+# modules between reruns; without these sentinels a reload would capture our
+# own patched Paragraph class and recurse forever.
+if not hasattr(_platypus, "_rg_original_paragraph"):
+    _platypus._rg_original_paragraph = _platypus.Paragraph
+if not hasattr(_platypus, "_rg_original_simple_doc_template"):
+    _platypus._rg_original_simple_doc_template = _platypus.SimpleDocTemplate
+if not hasattr(_styles_module, "_rg_original_get_sample_styles"):
+    _styles_module._rg_original_get_sample_styles = _styles_module.getSampleStyleSheet
+
+_OriginalParagraph = _platypus._rg_original_paragraph
+_OriginalSimpleDocTemplate = _platypus._rg_original_simple_doc_template
+_original_get_styles = _styles_module._rg_original_get_sample_styles
 
 
 _PALETTE = {
@@ -28,7 +38,7 @@ class _ProfessionalDocTemplate(_OriginalSimpleDocTemplate):
         super().__init__(*args, **kwargs)
         self.title = "Rocket Guardian AI - Telemetry Analysis Report"
         self.author = "Rocket Guardian AI"
-        self.subject = "Customer telemetry risk analysis"
+        self.subject = "Telemetry risk analysis"
 
     def build(self, flowables, *args, **kwargs):
         def draw_page(canvas, document):
@@ -79,11 +89,9 @@ class _ProfessionalDocTemplate(_OriginalSimpleDocTemplate):
             )
             canvas.restoreState()
 
-        # The dashboard may supply its own page callbacks. Remove them so
-        # they cannot collide with the professional theme callback.
         kwargs.pop("onFirstPage", None)
         kwargs.pop("onLaterPages", None)
-        super().build(
+        return super().build(
             flowables,
             onFirstPage=draw_page,
             onLaterPages=draw_page,
@@ -190,10 +198,8 @@ def _professional_paragraph(text, style=None, *args, **kwargs):
     return _OriginalParagraph(text, style, *args, **kwargs)
 
 
-# Patch the ReportLab module attributes before dashboard imports them.
-import reportlab.platypus as _platypus
-import reportlab.lib.styles as _styles_module
-
+# Patch only the public module attributes. The original objects are retained
+# above so subsequent Streamlit reloads remain safe and non-recursive.
 _platypus.SimpleDocTemplate = _ProfessionalDocTemplate
 _platypus.Paragraph = _professional_paragraph
 _styles_module.getSampleStyleSheet = _professional_get_stylesheet
