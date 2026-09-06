@@ -21,13 +21,17 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           path = Path("src/dashboard.py")
           text = path.read_text(encoding="utf-8")
 
-          text = text.replace(
-              "from src.live_telemetry import analyze_live_telemetry",
-              "from src.live_telemetry import analyze_live_telemetry, score_live_frame",
+          text = re.sub(
+              r'^from src\.live_telemetry import .*$',
+              'from src.live_telemetry import analyze_live_telemetry, score_live_frame',
+              text,
+              count=1,
+              flags=re.MULTILINE,
           )
           if "from src.live_stream import load_live_telemetry" not in text:
               text = text.replace(
