@@ -49,7 +49,7 @@ class RiskEngineTests(unittest.TestCase):
         self.assertEqual(peak["primary_risk_sensor"], "Vibration")
         self.assertEqual(peak["risk_level"], "CRITICAL")
         self.assertGreaterEqual(float(peak["overall_risk"]), 75.0)
-        self.assertEqual(int(peak["elevated_sensor_count"]), 1)
+        self.assertEqual(int(peak["elevated_sensor_count"]), 2)
 
 
 if __name__ == "__main__":
