@@ -10,3 +10,4 @@ supabase
 streamlit-autorefresh
 # Live Mission mode enabled
 requests
+openpyxl
