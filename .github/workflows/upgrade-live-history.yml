@@ -1,0 +1,66 @@
+name: Upgrade Live Dashboard
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add mission history and realtime monitor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/dashboard.py")
+          text = path.read_text(encoding="utf-8")
+
+          import_line = "    get_customer_mission_history,\n"
+          if "    get_customer_mission_history," not in text:
+              anchor = "    get_customer_by_auth_user_id,\n"
+              if anchor not in text:
+                  raise SystemExit("Could not find database import anchor")
+              text = text.replace(anchor, anchor + import_line, 1)
+
+          history_block = '''\n# ============================================================\n# MISSION HISTORY\n# ============================================================\n\nif customer_mode:\n    st.divider()\n    st.subheader("Mission History")\n    try:\n        history_customer = get_customer_by_auth_user_id(current_user.id)\n        if history_customer is not None:\n            history_rows = get_customer_mission_history(int(history_customer["id"]))\n            history_items = []\n            for row in history_rows:\n                history_items.append({\n                    "Mission": row["mission_name"],\n                    "File": row["source_filename"] or "-",\n                    "Samples": row["sample_count"] if row["sample_count"] is not None else "-",\n                    "AI Detections": row["ai_detection_count"] if row["ai_detection_count"] is not None else "-",\n                    "Risk": (f'{float(row["overall_risk"]):.1f}/100' if row["overall_risk"] is not None else "-"),\n                    "Status": row["risk_level"] or "-",\n                    "Primary Sensor": row["primary_risk_sensor"] or "-",\n                    "Peak Time (s)": (f'{float(row["peak_time_s"]):.2f}' if row["peak_time_s"] is not None else "-"),\n                    "Saved At": str(row["run_created_at"] or row["mission_created_at"]),\n                })\n            if history_items:\n                st.dataframe(pd.DataFrame(history_items), width="stretch", hide_index=True)\n            else:\n                st.info("No saved mission history yet.")\n        else:\n            st.info("Mission history will appear after the first saved analysis.")\n    except Exception as exc:\n        st.warning(f"Mission history unavailable: {exc}")\n\n'''
+
+          if "# MISSION HISTORY\n# ============================================================" not in text:
+              anchor = "# ============================================================\n# OVERALL SYSTEM STATUS\n# ============================================================\n"
+              if anchor not in text:
+                  raise SystemExit("Could not find overall-status anchor")
+              text = text.replace(anchor, history_block + anchor, 1)
+
+          realtime_block = '''\n    st.markdown("### Real-Time Stream Monitor")\n    latest_live = risk_data.iloc[-1]\n    rt_cols = st.columns(5)\n    with rt_cols[0]:\n        st.metric("Stream Time", f'{float(latest_live["time_s"]):.2f} s')\n    with rt_cols[1]:\n        st.metric("Pressure", f'{float(latest_live["pressure_kpa"]):.2f} kPa')\n    with rt_cols[2]:\n        st.metric("Temperature", f'{float(latest_live["temperature_k"]):.2f} K')\n    with rt_cols[3]:\n        st.metric("Vibration", f'{float(latest_live["vibration_g"]):.3f} g')\n    with rt_cols[4]:\n        st.metric("Thrust", f'{float(latest_live["thrust_n"]):.1f} N')\n\n    live_risk_series = risk_data[["time_s", "overall_risk"]].tail(120)\n    live_risk_fig = go.Figure()\n    live_risk_fig.add_trace(\n        go.Scatter(\n            x=live_risk_series["time_s"],\n            y=live_risk_series["overall_risk"],\n            mode="lines+markers",\n            name="Overall Risk",\n        )\n    )\n    live_risk_fig.add_hline(y=75, line_dash="dash", annotation_text="CRITICAL")\n    live_risk_fig.add_hline(y=45, line_dash="dot", annotation_text="WARNING")\n    live_risk_fig.update_layout(\n        title="Live Risk Stream (latest 120 samples)",\n        xaxis_title="Telemetry Time (s)",\n        yaxis_title="Risk / 100",\n        yaxis_range=[0, 100],\n        height=320,\n        margin=dict(l=20, r=20, t=50, b=20),\n    )\n    st.plotly_chart(live_risk_fig, width="stretch")\n\n'''
+
+          if "Real-Time Stream Monitor" not in text:
+              anchor = "    st.info(live_agents[\"mission\"][\"recommendation\"])\n"
+              if anchor not in text:
+                  raise SystemExit("Could not find live agent recommendation anchor")
+              text = text.replace(anchor, anchor + realtime_block, 1)
+
+          path.write_text(text, encoding="utf-8")
+
+      - name: Validate dashboard
+        run: python -m compileall -q src
+
+      - name: Commit upgrade
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dashboard.py
+          if git diff --cached --quiet; then
+            echo "Dashboard already upgraded."
+          else
+            git commit -m "Add mission history and realtime stream monitor"
+            git push origin HEAD:main
+          fi
