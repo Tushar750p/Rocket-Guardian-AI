@@ -15,7 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.telemetry_analysis import analyze_telemetry
-from src.live_telemetry import analyze_live_telemetry, score_live_frame
+from src.live_telemetry import analyze_live_telemetry, score_live_frame, score_live_frame
 from src.live_stream import load_live_telemetry
 from src.ai_agents import MissionAgent
 from src.risk_analysis import analyze_risk, summarize_risk
