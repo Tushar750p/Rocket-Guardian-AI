@@ -1,0 +1,69 @@
+name: Upgrade Live AI Agents
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Integrate live HTTP stream and agents
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/dashboard.py")
+          text = path.read_text(encoding="utf-8")
+
+          text = text.replace(
+              "from src.live_telemetry import analyze_live_telemetry",
+              "from src.live_telemetry import analyze_live_telemetry, score_live_frame",
+          )
+          if "from src.live_stream import load_live_telemetry" not in text:
+              text = text.replace(
+                  "from src.live_telemetry import analyze_live_telemetry, score_live_frame\n",
+                  "from src.live_telemetry import analyze_live_telemetry, score_live_frame\nfrom src.live_stream import load_live_telemetry\nfrom src.ai_agents import MissionAgent\n",
+              )
+
+          old_sidebar = '''    st.sidebar.success("LIVE telemetry stream active")\n    st.sidebar.caption("Software-simulated live telemetry")'''
+          new_sidebar = '''    live_source = st.sidebar.selectbox(\n        "Live telemetry source",\n        ["Simulator", "HTTP endpoint"],\n    )\n\n    live_endpoint = ""\n    if live_source == "HTTP endpoint":\n        live_endpoint = st.sidebar.text_input(\n            "Telemetry endpoint URL",\n            value=os.getenv("ROCKET_GUARDIAN_LIVE_URL", ""),\n            placeholder="https://your-server.example/api/telemetry",\n        ).strip()\n        st.sidebar.caption("Endpoint must return JSON telemetry rows.")\n\n    st.sidebar.success("LIVE telemetry stream active")\n    st.sidebar.caption(\n        "Real HTTP stream" if live_source == "HTTP endpoint" else "Software simulator"\n    )'''
+          if old_sidebar in text and "Live telemetry source" not in text:
+              text = text.replace(old_sidebar, new_sidebar, 1)
+
+          old_branch = '''if live_mode:\n\n    live_tick = int(time.time())\n    data = _analyze_live_telemetry_cached(live_tick)'''
+          new_branch = '''if live_mode:\n\n    if live_source == "HTTP endpoint":\n        raw_live_data, live_source_status = load_live_telemetry(live_endpoint)\n        if raw_live_data is None:\n            st.error(f"Live endpoint unavailable: {live_source_status}")\n            st.info("Switch Live telemetry source to Simulator, or fix the endpoint.")\n            st.stop()\n        data = score_live_frame(raw_live_data)\n    else:\n        live_tick = int(time.time())\n        data = _analyze_live_telemetry_cached(live_tick)'''
+          if old_branch in text and "raw_live_data, live_source_status" not in text:
+              text = text.replace(old_branch, new_branch, 1)
+
+          anchor = '''if live_mode:\n\n    risk_data = _analyze_risk_cached(data)\n'''
+          insert = '''if live_mode:\n\n    risk_data = _analyze_risk_cached(data)\n    live_agents = MissionAgent.run(risk_data)\n\n    st.markdown("### Live AI Agent Console")\n    agent_cols = st.columns(3)\n    with agent_cols[0]:\n        st.metric(\n            "Anomaly Agent",\n            live_agents["anomaly"]["status"],\n            f"{live_agents[\"anomaly\"][\"detections\"]} detections",\n        )\n    with agent_cols[1]:\n        st.metric(\n            "Sensor Agent",\n            live_agents["sensor"]["top_sensor"],\n            f"{live_agents[\"sensor\"][\"top_risk\"]:.1f} risk",\n        )\n    with agent_cols[2]:\n        st.metric(\n            "Mission Agent",\n            live_agents["mission"]["mission_state"],\n            f"Peak {live_agents[\"mission\"][\"peak_time_s\"]:.2f}s",\n        )\n    st.info(live_agents["mission"]["recommendation"])\n'''
+          if anchor in text and "Live AI Agent Console" not in text:
+              text = text.replace(anchor, insert, 1)
+
+          path.write_text(text, encoding="utf-8")
+          print("Live source + AI agent console integrated.")
+
+      - name: Validate dashboard
+        run: python -m compileall -q src/dashboard.py src/live_stream.py src/live_telemetry.py src/ai_agents.py
+
+      - name: Commit integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dashboard.py
+          if git diff --cached --quiet; then
+            echo "No dashboard integration changes needed."
+          else
+            git commit -m "Integrate live HTTP telemetry and AI agents"
+            git push origin HEAD:main
+          fi
