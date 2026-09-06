@@ -743,16 +743,11 @@ if live_mode:
     live_story.append(Spacer(1, 7))
 
     live_story.append(Paragraph("Peak Risk Event", live_section))
-    peak_time = float(peak["time_s"])
-    peak_risk_value = float(peak["overall_risk"])
-    peak_sensor = str(peak["primary_risk_sensor"])
-    peak_text = (
-        "Peak system risk was "
-        f"<b>{peak_risk_value:.1f}/100</b> "
-        f"at <b>{peak_time:.2f} s</b>. "
-        f"<b>{peak_sensor}</b> was the primary risk sensor."
-    )
-    live_story.append(Paragraph(peak_text, live_body))
+    live_story.append(Paragraph(
+        f'Peak system risk was <b>{float(peak["overall_risk"]):.1f}/100</b> at <b>{float(peak["time_s"]):.2f} s</b>. '<
+        f'<b>{peak["primary_risk_sensor"]}</b> was the primary risk sensor.',
+        live_body,
+    ))
 
     incident_events = live_agents["incident"].get("events", [])
     if incident_events:
