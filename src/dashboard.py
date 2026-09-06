@@ -606,46 +606,39 @@ if live_mode:
 
     agent_cols = st.columns(3)
     with agent_cols[0]:
-        st.metric(
-            "Anomaly Agent",
-            live_agents["anomaly"]["status"],
-            f'{live_agents["anomaly"]["detections"]} detections',
-        )
+        st.metric("Anomaly Agent", live_agents["anomaly"]["status"], f'{live_agents["anomaly"]["detections"]} detections')
     with agent_cols[1]:
-        st.metric(
-            "Sensor Agent",
-            live_agents["sensor"]["top_sensor"],
-            f'{live_agents["sensor"]["top_risk"]:.1f} risk',
-        )
+        st.metric("Sensor Agent", live_agents["sensor"]["top_sensor"], f'{live_agents["sensor"]["top_risk"]:.1f} risk')
     with agent_cols[2]:
-        st.metric(
-            "Trend Agent",
-            live_agents["trend"]["direction"],
-            f'{live_agents["trend"]["recent_risk"]:.1f} recent risk',
-        )
+        st.metric("Trend Agent", live_agents["trend"]["direction"], f'{live_agents["trend"]["recent_risk"]:.1f} recent risk')
 
     agent_cols_2 = st.columns(3)
     with agent_cols_2[0]:
-        st.metric(
-            "Telemetry Health",
-            live_agents["telemetry"]["status"],
-            f'{live_agents["telemetry"]["quality"]}% quality',
-        )
+        st.metric("Telemetry Health", live_agents["telemetry"]["status"], f'{live_agents["telemetry"]["quality"]}% quality')
     with agent_cols_2[1]:
-        st.metric(
-            "Mission Agent",
-            live_agents["mission"]["mission_state"],
-            f'Peak {live_agents["mission"]["peak_time_s"]:.2f}s',
-        )
+        st.metric("Mission Agent", live_agents["mission"]["mission_state"], f'Peak {live_agents["mission"]["peak_time_s"]:.2f}s')
     with agent_cols_2[2]:
         incident_state = "ACTIVE" if live_agents["incident"]["active"] else "CLEAR"
-        st.metric(
-            "Incident Agent",
-            incident_state,
-            f'{live_agents["incident"]["event_count"]} event(s)',
-        )
+        st.metric("Incident Agent", incident_state, f'{live_agents["incident"]["event_count"]} event(s)')
 
     st.info(live_agents["mission"]["recommendation"])
+
+    latest_live = risk_data.iloc[-1]
+    st.markdown("### Real-Time Stream Monitor")
+    rt_cols = st.columns(5)
+    with rt_cols[0]: st.metric("Stream Time", f'{float(latest_live["time_s"]):.2f} s')
+    with rt_cols[1]: st.metric("Pressure", f'{float(latest_live["pressure_kpa"]):.2f} kPa')
+    with rt_cols[2]: st.metric("Temperature", f'{float(latest_live["temperature_k"]):.2f} K')
+    with rt_cols[3]: st.metric("Vibration", f'{float(latest_live["vibration_g"]):.3f} g')
+    with rt_cols[4]: st.metric("Thrust", f'{float(latest_live["thrust_n"]):.1f} N')
+
+    live_risk_series = risk_data[["time_s", "overall_risk"]].tail(120)
+    live_risk_fig = go.Figure()
+    live_risk_fig.add_trace(go.Scatter(x=live_risk_series["time_s"], y=live_risk_series["overall_risk"], mode="lines+markers", name="Overall Risk"))
+    live_risk_fig.add_hline(y=75, line_dash="dash", annotation_text="CRITICAL")
+    live_risk_fig.add_hline(y=45, line_dash="dot", annotation_text="WARNING")
+    live_risk_fig.update_layout(title="Live Risk Stream (latest 120 samples)", xaxis_title="Telemetry Time (s)", yaxis_title="Risk / 100", yaxis_range=[0, 100], height=320)
+    st.plotly_chart(live_risk_fig, width="stretch")
 
     with st.expander("Agent details", expanded=False):
         st.write({
@@ -666,89 +659,29 @@ if live_mode:
     from reportlab.lib.styles import ParagraphStyle
 
     live_pdf = BytesIO()
-    live_doc = SimpleDocTemplate(
-        live_pdf,
-        pagesize=A4,
-        rightMargin=16 * mm,
-        leftMargin=16 * mm,
-        topMargin=16 * mm,
-        bottomMargin=18 * mm,
-        title="Rocket Guardian AI Live Mission Report",
-        author="Rocket Guardian AI",
-    )
+    live_doc = SimpleDocTemplate(live_pdf, pagesize=A4, rightMargin=16 * mm, leftMargin=16 * mm, topMargin=16 * mm, bottomMargin=18 * mm, title="Rocket Guardian AI Live Mission Report", author="Rocket Guardian AI")
     live_styles = getSampleStyleSheet()
-    live_title = ParagraphStyle(
-        "LiveTitle", parent=live_styles["Title"], fontName="Helvetica-Bold",
-        fontSize=21, leading=25, alignment=1, textColor=colors.HexColor("#102A43")
-    )
-    live_section = ParagraphStyle(
-        "LiveSection", parent=live_styles["Heading2"], fontName="Helvetica-Bold",
-        fontSize=11, leading=14, textColor=colors.HexColor("#102A43"), spaceBefore=7, spaceAfter=6
-    )
-    live_body = ParagraphStyle(
-        "LiveBody", parent=live_styles["BodyText"], fontName="Helvetica",
-        fontSize=9.2, leading=12.5, textColor=colors.HexColor("#172B4D")
-    )
-    live_small = ParagraphStyle(
-        "LiveSmall", parent=live_styles["BodyText"], fontName="Helvetica",
-        fontSize=7.5, leading=9, textColor=colors.HexColor("#667085")
-    )
+    live_title = ParagraphStyle("LiveTitle", parent=live_styles["Title"], fontName="Helvetica-Bold", fontSize=21, leading=25, alignment=1, textColor=colors.HexColor("#102A43"))
+    live_section = ParagraphStyle("LiveSection", parent=live_styles["Heading2"], fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=colors.HexColor("#102A43"), spaceBefore=7, spaceAfter=6)
+    live_body = ParagraphStyle("LiveBody", parent=live_styles["BodyText"], fontName="Helvetica", fontSize=9.2, leading=12.5, textColor=colors.HexColor("#172B4D"))
+    live_small = ParagraphStyle("LiveSmall", parent=live_styles["BodyText"], fontName="Helvetica", fontSize=7.5, leading=9, textColor=colors.HexColor("#667085"))
 
     peak = risk_data.loc[risk_data["overall_risk"].idxmax()]
-    live_story = [
-        Paragraph("Rocket Guardian AI", live_title),
-        Paragraph("LIVE MISSION TELEMETRY & MULTI-AGENT ASSESSMENT", live_small),
-        Spacer(1, 8),
-    ]
-    live_summary = Table(
-        [
-            ["Samples", "Peak Risk", "Status", "Primary Sensor"],
-            [str(len(risk_data)), f'{float(peak["overall_risk"]):.1f}/100', str(peak["risk_level"]), str(peak["primary_risk_sensor"])],
-        ],
-        colWidths=[42 * mm, 42 * mm, 42 * mm, 42 * mm],
-    )
-    live_summary.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F8FA")),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
-        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#D0D5DD")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D0D5DD")),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
+    live_story = [Paragraph("Rocket Guardian AI", live_title), Paragraph("LIVE MISSION TELEMETRY & MULTI-AGENT ASSESSMENT", live_small), Spacer(1, 8)]
+    live_summary = Table([["Samples", "Peak Risk", "Status", "Primary Sensor"], [str(len(risk_data)), f'{float(peak["overall_risk"]):.1f}/100', str(peak["risk_level"]), str(peak["primary_risk_sensor"])]], colWidths=[42 * mm, 42 * mm, 42 * mm, 42 * mm])
+    live_summary.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F8FA")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"), ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#D0D5DD")), ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D0D5DD")), ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
     live_story.append(live_summary)
-
     live_story.append(Paragraph("Multi-Agent Assessment", live_section))
-    agent_rows = [["Agent", "State / Finding", "Detail"]]
-    agent_rows.extend([
-        ["Anomaly Agent", live_agents["anomaly"]["status"], f'{live_agents["anomaly"]["detections"]} detections; primary {live_agents["anomaly"]["primary_sensor"]}'],
-        ["Sensor Agent", live_agents["sensor"]["top_sensor"], f'{live_agents["sensor"]["top_risk"]:.1f}/100 top sensor risk'],
-        ["Trend Agent", live_agents["trend"]["direction"], f'{live_agents["trend"]["recent_risk"]:.1f} recent risk; slope {live_agents["trend"]["slope"]}'],
-        ["Telemetry Health", live_agents["telemetry"]["status"], f'{live_agents["telemetry"]["quality"]}% quality'],
-        ["Mission Agent", live_agents["mission"]["mission_state"], live_agents["mission"]["recommendation"]],
-        ["Incident Agent", "ACTIVE" if live_agents["incident"]["active"] else "CLEAR", f'{live_agents["incident"]["event_count"]} incident event(s)'],
-    ])
+    agent_rows = [["Agent", "State / Finding", "Detail"], ["Anomaly Agent", live_agents["anomaly"]["status"], f'{live_agents["anomaly"]["detections"]} detections; primary {live_agents["anomaly"]["primary_sensor"]}'], ["Sensor Agent", live_agents["sensor"]["top_sensor"], f'{live_agents["sensor"]["top_risk"]:.1f}/100 top sensor risk'], ["Trend Agent", live_agents["trend"]["direction"], f'{live_agents["trend"]["recent_risk"]:.1f} recent risk; slope {live_agents["trend"]["slope"]}'], ["Telemetry Health", live_agents["telemetry"]["status"], f'{live_agents["telemetry"]["quality"]}% quality'], ["Mission Agent", live_agents["mission"]["mission_state"], live_agents["mission"]["recommendation"]], ["Incident Agent", "ACTIVE" if live_agents["incident"]["active"] else "CLEAR", f'{live_agents["incident"]["event_count"]} incident event(s)']]
     agent_table = Table(agent_rows, colWidths=[40 * mm, 40 * mm, 88 * mm], repeatRows=1)
-    agent_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F8FA")),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D0D5DD")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
+    agent_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F8FA")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8), ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D0D5DD")), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
     live_story.append(agent_table)
-    live_story.append(Spacer(1, 7))
-
     live_story.append(Paragraph("Peak Risk Event", live_section))
-    live_story.append(Paragraph(
-        f'Peak system risk was <b>{float(peak["overall_risk"]):.1f}/100</b> at <b>{float(peak["time_s"]):.2f} s</b>. '<
-        f'<b>{peak["primary_risk_sensor"]}</b> was the primary risk sensor.',
-        live_body,
-    ))
-
+    peak_time = float(peak["time_s"])
+    peak_risk_value = float(peak["overall_risk"])
+    peak_sensor = str(peak["primary_risk_sensor"])
+    peak_text = "Peak system risk was " + f"<b>{peak_risk_value:.1f}/100</b> at <b>{peak_time:.2f} s</b>. " + f"<b>{peak_sensor}</b> was the primary risk sensor."
+    live_story.append(Paragraph(peak_text, live_body))
     incident_events = live_agents["incident"].get("events", [])
     if incident_events:
         live_story.append(Paragraph("Recent Critical Incidents", live_section))
@@ -756,24 +689,12 @@ if live_mode:
         for event in incident_events:
             incident_rows.append([str(event["start_s"]), str(event["end_s"]), f'{event["peak_risk"]:.1f}/100', str(event["sensor"])])
         incident_table = Table(incident_rows, colWidths=[36 * mm, 36 * mm, 44 * mm, 52 * mm], repeatRows=1)
-        incident_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FEF3F2")),
-            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D0D5DD")),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ]))
+        incident_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FEF3F2")), ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D0D5DD")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
         live_story.append(incident_table)
-
     live_story.append(Spacer(1, 7))
     live_story.append(Paragraph("Prototype limitation: risk and agent outputs are analytical indicators and are not flight-safety guarantees.", live_small))
     live_doc.build(live_story)
-    st.download_button(
-        label="Download Live PDF Report",
-        data=live_pdf.getvalue(),
-        file_name="rocket_guardian_live_mission_report.pdf",
-        mime="application/pdf",
-    )
+    st.download_button(label="Download Live PDF Report", data=live_pdf.getvalue(), file_name="rocket_guardian_live_mission_report.pdf", mime="application/pdf")
 
 elif customer_mode:
 
