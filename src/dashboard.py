@@ -1911,71 +1911,291 @@ if customer_mode and risk_data is not None:
 
     try:
 
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
+            KeepTogether,
+            Table,
+            TableStyle,
+        )
+        from xml.sax.saxutils import escape
+
         styles = getSampleStyleSheet()
 
-        title_style = styles["Title"]
-        title_style.alignment = TA_CENTER
+        primary = colors.HexColor("#102A43")
+        accent = colors.HexColor("#1F7A8C")
+        critical = colors.HexColor("#B42318")
+        warning = colors.HexColor("#B54708")
+        normal = colors.HexColor("#067647")
+        light_bg = colors.HexColor("#F5F8FA")
+        border = colors.HexColor("#D0D5DD")
+        text_dark = colors.HexColor("#172B4D")
+        muted = colors.HexColor("#667085")
 
-        normal_style = styles["BodyText"]
+        title_style = ParagraphStyle(
+            "RGTitle",
+            parent=styles["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=24,
+            leading=28,
+            alignment=TA_LEFT,
+            textColor=colors.white,
+            spaceAfter=0,
+        )
+
+        subtitle_style = ParagraphStyle(
+            "RGSubtitle",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=10,
+            leading=13,
+            textColor=colors.white,
+        )
+
+        section_style = ParagraphStyle(
+            "RGSection",
+            parent=styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=15,
+            textColor=primary,
+            spaceBefore=8,
+            spaceAfter=8,
+        )
+
+        body_style = ParagraphStyle(
+            "RGBody",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=9.5,
+            leading=13,
+            textColor=text_dark,
+        )
+
+        small_style = ParagraphStyle(
+            "RGSmall",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=8,
+            leading=10,
+            textColor=muted,
+        )
+
+        metric_label = ParagraphStyle(
+            "RGMetricLabel",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=7.5,
+            leading=9,
+            textColor=muted,
+            alignment=TA_CENTER,
+        )
+
+        metric_value = ParagraphStyle(
+            "RGMetricValue",
+            parent=styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=15,
+            leading=17,
+            textColor=primary,
+            alignment=TA_CENTER,
+        )
+
+        risk_color = {
+            "CRITICAL": critical,
+            "WARNING": warning,
+            "NORMAL": normal,
+        }.get(str(risk_level).upper(), primary)
+
+        def safe(value):
+            return escape(str(value))
+
+        def metric_card(label, value):
+            return [
+                Paragraph(safe(label), metric_label),
+                Paragraph(safe(value), metric_value),
+            ]
+
+        def footer(canvas, document):
+            canvas.saveState()
+            width, height = A4
+            canvas.setStrokeColor(border)
+            canvas.line(18 * mm, 15 * mm, width - 18 * mm, 15 * mm)
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(muted)
+            canvas.drawString(18 * mm, 10 * mm, "Rocket Guardian AI - Research Prototype")
+            canvas.drawRightString(width - 18 * mm, 10 * mm, f"Page {document.page}")
+            canvas.restoreState()
 
         doc = SimpleDocTemplate(
             pdf_path,
             pagesize=A4,
-            rightMargin=40,
-            leftMargin=40,
-            topMargin=40,
-            bottomMargin=40,
+            rightMargin=18 * mm,
+            leftMargin=18 * mm,
+            topMargin=18 * mm,
+            bottomMargin=22 * mm,
+            title="Rocket Guardian AI Telemetry Analysis Report",
+            author="Rocket Guardian AI",
         )
 
         story = []
 
-        story.append(
-            Paragraph(
-                "Rocket Guardian AI",
-                title_style,
-            )
+        header = Table(
+            [[
+                Paragraph("Rocket Guardian AI", title_style),
+                Paragraph("TELEMETRY ANALYSIS REPORT<br/>Customer Mission Assessment", subtitle_style),
+            ]],
+            colWidths=[105 * mm, 67 * mm],
         )
+        header.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), primary),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+            ("TOPPADDING", (0, 0), (-1, -1), 12),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+        ]))
+        story.append(header)
+        story.append(Spacer(1, 10))
 
-        story.append(
-            Spacer(1, 12)
+        meta = Table([
+            [Paragraph("Customer", small_style), Paragraph("Mission", small_style), Paragraph("Account", small_style)],
+            [Paragraph(safe(customer_name), body_style), Paragraph(safe(mission_name), body_style), Paragraph(safe(customer_email), body_style)],
+        ], colWidths=[57 * mm, 57 * mm, 58 * mm])
+        meta.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), light_bg),
+            ("BOX", (0, 0), (-1, -1), 0.6, border),
+            ("INNERGRID", (0, 0), (-1, -1), 0.35, border),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(meta)
+        story.append(Spacer(1, 10))
+
+        kpis = Table([
+            metric_card("TELEMETRY SAMPLES", total_samples),
+            [
+                Paragraph("AI DETECTIONS", metric_label),
+                Paragraph("SYSTEM STATUS", metric_label),
+                Paragraph("OVERALL RISK", metric_label),
+                Paragraph("MISSION HEALTH", metric_label),
+            ],
+            [
+                Paragraph(safe(ai_detections), metric_value),
+                Paragraph(safe(highest_status), ParagraphStyle("RGS", parent=metric_value, textColor=risk_color)),
+                Paragraph(f"{overall_risk:.1f}/100", ParagraphStyle("RGR", parent=metric_value, textColor=risk_color)),
+                Paragraph(f"{max(0.0, 100.0 - overall_risk):.1f}/100", metric_value),
+            ],
+        ], colWidths=[44 * mm, 44 * mm, 44 * mm, 44 * mm])
+        kpis.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, 0), light_bg),
+            ("BACKGROUND", (1, 1), (-1, -1), colors.white),
+            ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+            ("BOX", (0, 0), (-1, -1), 0.7, border),
+            ("INNERGRID", (0, 1), (-1, -1), 0.35, border),
+            ("SPAN", (0, 0), (0, 0)),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ]))
+        story.append(kpis)
+        story.append(Spacer(1, 8))
+
+        story.append(Paragraph("Risk Assessment", section_style))
+        risk_summary = Table([
+            [Paragraph("Risk Level", small_style), Paragraph("Primary Risk Sensor", small_style), Paragraph("Elevated Sensors", small_style), Paragraph("Peak Time", small_style)],
+            [Paragraph(safe(risk_level), ParagraphStyle("RGL", parent=body_style, textColor=risk_color, fontName="Helvetica-Bold")), Paragraph(safe(primary_sensor), body_style), Paragraph(safe(int(peak_row["elevated_sensor_count"])), body_style), Paragraph(f"{float(peak_row['time_s']):.1f} s", body_style)],
+        ], colWidths=[44 * mm, 50 * mm, 44 * mm, 38 * mm])
+        risk_summary.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), light_bg),
+            ("BOX", (0, 0), (-1, -1), 0.6, border),
+            ("INNERGRID", (0, 0), (-1, -1), 0.35, border),
+            ("LEFTPADDING", (0, 0), (-1, -1), 7),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(risk_summary)
+
+        story.append(Paragraph("Sensor Risk Profile", section_style))
+        sensor_rows = [
+            [Paragraph("Sensor", small_style), Paragraph("Peak Risk", small_style), Paragraph("Status", small_style)],
+        ]
+        for sensor_name, risk_column in [
+            ("Pressure", "pressure_risk"),
+            ("Temperature", "temperature_risk"),
+            ("Vibration", "vibration_risk"),
+            ("Thrust", "thrust_risk"),
+        ]:
+            value = float(risk_data[risk_column].max())
+            status = "CRITICAL" if value >= 75 else "WARNING" if value >= 45 else "NORMAL"
+            status_color = {"CRITICAL": critical, "WARNING": warning, "NORMAL": normal}[status]
+            sensor_rows.append([
+                Paragraph(sensor_name, body_style),
+                Paragraph(f"{value:.1f}/100", body_style),
+                Paragraph(status, ParagraphStyle("RGSensor", parent=body_style, textColor=status_color, fontName="Helvetica-Bold")),
+            ])
+        sensor_table = Table(sensor_rows, colWidths=[70 * mm, 50 * mm, 56 * mm])
+        sensor_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), light_bg),
+            ("BOX", (0, 0), (-1, -1), 0.6, border),
+            ("INNERGRID", (0, 0), (-1, -1), 0.35, border),
+            ("LEFTPADDING", (0, 0), (-1, -1), 7),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(sensor_table)
+
+        story.append(Paragraph("Peak Risk Event", section_style))
+        peak_text = (
+            f"The highest system risk occurred at <b>{float(peak_row['time_s']):.1f} seconds</b>. "
+            f"<b>{safe(primary_sensor)}</b> was the dominant sensor with "
+            f"<b>{int(peak_row['elevated_sensor_count'])}</b> elevated sensor(s)."
         )
+        story.append(Paragraph(peak_text, body_style))
+        story.append(Spacer(1, 6))
 
-        story.append(
-            Paragraph(
-                "Telemetry Analysis Report",
-                styles["Heading2"],
-            )
-        )
+        story.append(Paragraph("AI Assessment", section_style))
+        explanation_box = Table([[Paragraph(safe(explanation), body_style)]], colWidths=[176 * mm])
+        explanation_box.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), light_bg),
+            ("BOX", (0, 0), (-1, -1), 0.8, accent),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ]))
+        story.append(explanation_box)
 
-        story.append(
-            Spacer(1, 15)
-        )
+        story.append(Paragraph("Methodology & Limitations", section_style))
+        notes = [
+            "AI detections are based on the learned phase-aware telemetry baseline.",
+            "Ground-truth anomaly labels were not provided with this telemetry file; classification metrics are therefore not reported.",
+            "Risk scores are prototype analytical indicators and are not flight-safety guarantees.",
+        ]
+        for note in notes:
+            story.append(Paragraph("• " + safe(note), body_style))
+            story.append(Spacer(1, 2))
 
-        for line in report_lines:
+        story.append(Spacer(1, 7))
+        disclaimer = Table([[Paragraph("NOT FOR FLIGHT-CRITICAL USE", ParagraphStyle("RGDisclaimer", parent=body_style, fontName="Helvetica-Bold", textColor=critical, alignment=TA_CENTER))]], colWidths=[176 * mm])
+        disclaimer.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FEF3F2")),
+            ("BOX", (0, 0), (-1, -1), 0.8, critical),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ]))
+        story.append(disclaimer)
 
-            if not line.strip():
-                story.append(
-                    Spacer(1, 8)
-                )
-
-            elif set(line.strip()) == {"="}:
-                continue
-
-            elif set(line.strip()) == {"-"}:
-                continue
-
-            else:
-                story.append(
-                    Paragraph(
-                        line.replace(
-                            "&",
-                            "&amp;",
-                        ),
-                        normal_style,
-                    )
-                )
-
-        doc.build(story)
+        doc.build(story, onFirstPage=footer, onLaterPages=footer)
 
         with open(
             pdf_path,
