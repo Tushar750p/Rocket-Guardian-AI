@@ -24,8 +24,8 @@ jobs:
 
           path = Path("src/dashboard.py")
           text = path.read_text(encoding="utf-8")
-          broken = " </b>. '<\\n        f'<b>"
-          fixed = " </b>. '\\n        f'<b>"
+          broken = " </b>. '<\n        f'<b>"
+          fixed = " </b>. '\n        f'<b>"
           if broken not in text:
               print("Live PDF expression already fixed or not present.")
           else:
