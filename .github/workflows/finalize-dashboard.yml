@@ -31,7 +31,7 @@ jobs:
                   raise SystemExit("Database import anchor not found")
               text = text.replace(anchor, anchor + "    get_customer_mission_history,\n", 1)
 
-          if "# MISSION HISTORY\n# ============================================================" not in text:
+          if 'st.subheader("Mission History")' not in text:
               anchor = "# ============================================================\n# OVERALL SYSTEM STATUS\n# ============================================================\n"
               if anchor not in text:
                   raise SystemExit("Overall system status anchor not found")
