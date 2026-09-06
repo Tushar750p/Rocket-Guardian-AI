@@ -1,0 +1,81 @@
+name: Production Upgrade
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Upgrade dashboard
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/dashboard.py")
+          text = path.read_text(encoding="utf-8")
+
+          if "from src.production_features import" not in text:
+              anchor = "from src.live_stream import load_live_telemetry\n"
+              addition = "from src.production_features import build_alerts, alerts_csv, excel_bytes\n"
+              if anchor not in text:
+                  raise SystemExit("live_stream import anchor not found")
+              text = text.replace(anchor, anchor + addition, 1)
+
+          live_marker = 'if "Live Mission" in analysis_mode_options:'
+          if live_marker not in text:
+              # no-op: current UI already exposes Live Mission; retained for future versions
+              pass
+
+          alert_marker = '    st.info(live_agents["mission"]["recommendation"])\n'
+          if "### Live Alert Center" not in text:
+              alert_block = '''    st.info(live_agents["mission"]["recommendation"])\n\n    st.markdown("### Live Alert Center")\n    live_alerts = build_alerts(risk_data)\n    alert_count = int(len(live_alerts))\n    critical_count = int((live_alerts["Severity"] == "CRITICAL").sum()) if not live_alerts.empty else 0\n    alert_cols = st.columns(3)\n    with alert_cols[0]:\n        st.metric("Alert Events", alert_count)\n    with alert_cols[1]:\n        st.metric("Critical Events", critical_count)\n    with alert_cols[2]:\n        st.metric("Latest Risk", f'{float(risk_data["overall_risk"].iloc[-1]):.1f}/100')\n    if not live_alerts.empty:\n        st.dataframe(live_alerts.head(25), width="stretch", hide_index=True)\n        download_cols = st.columns(2)\n        with download_cols[0]:\n            st.download_button(\n                "Download Alert Log (CSV)",\n                data=alerts_csv(live_alerts),\n                file_name="rocket_guardian_live_alerts.csv",\n                mime="text/csv",\n                key="live_alert_csv",\n            )\n        with download_cols[1]:\n            st.download_button(\n                "Download Telemetry (Excel)",\n                data=excel_bytes(risk_data),\n                file_name="rocket_guardian_live_telemetry.xlsx",\n                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",\n                key="live_telemetry_xlsx",\n            )\n'''
+              if alert_marker not in text:
+                  raise SystemExit("live recommendation anchor not found")
+              text = text.replace(alert_marker, alert_block, 1)
+
+          # Add explicit mission controls once.
+          controls_anchor = 'if live_mode:\n\n    if live_source == "HTTP endpoint":\n'
+          if "Live Mission Controls" not in text and controls_anchor in text:
+              control_block = '''if live_mode:\n\n    st.sidebar.subheader("Live Mission Controls")\n    live_running = st.session_state.get("live_mission_running", True)\n    control_cols = st.sidebar.columns(2)\n    with control_cols[0]:\n        if st.button("Start", use_container_width=True, key="live_start"):\n            st.session_state["live_mission_running"] = True\n            st.rerun()\n    with control_cols[1]:\n        if st.button("Stop", use_container_width=True, key="live_stop"):\n            st.session_state["live_mission_running"] = False\n            st.rerun()\n    live_running = st.session_state.get("live_mission_running", True)\n    if not live_running:\n        st.sidebar.warning("Live mission monitoring is stopped.")\n        st.info("Live monitoring stopped. Press Start in the sidebar to resume.")\n        st.stop()\n\n    if live_source == "HTTP endpoint":\n'''
+              text = text.replace(controls_anchor, control_block, 1)
+
+          # Measure HTTP source latency and show source health.
+          source_anchor = '        raw_live_data, live_source_status = load_live_telemetry(live_endpoint)\n'
+          if "Live Source Health" not in text and source_anchor in text:
+              replacement = '''        source_started_at = time.perf_counter()\n        raw_live_data, live_source_status = load_live_telemetry(live_endpoint)\n        source_latency_ms = (time.perf_counter() - source_started_at) * 1000.0\n        st.sidebar.metric("Live Source Health", "ONLINE" if raw_live_data is not None else "OFFLINE")\n        st.sidebar.caption(f"Endpoint read latency: {source_latency_ms:.0f} ms")\n'''
+              text = text.replace(source_anchor, replacement, 1)
+
+          # Add customer history export button inside existing history block.
+          history_anchor = '            if history_items:\n                st.dataframe(pd.DataFrame(history_items), width="stretch", hide_index=True)\n'
+          if "Download Mission History" not in text and history_anchor in text:
+              replacement = '''            if history_items:\n                history_df = pd.DataFrame(history_items)\n                st.dataframe(history_df, width="stretch", hide_index=True)\n                st.download_button(\n                    "Download Mission History (CSV)",\n                    data=history_df.to_csv(index=False).encode("utf-8"),\n                    file_name="rocket_guardian_mission_history.csv",\n                    mime="text/csv",\n                    key="customer_history_csv",\n                )\n'''
+              text = text.replace(history_anchor, replacement, 1)
+
+          path.write_text(text, encoding="utf-8")
+          print("Production dashboard upgrades applied.")
+
+      - name: Validate Python
+        run: python -m compileall -q src
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dashboard.py
+          if git diff --cached --quiet; then
+            echo "No dashboard changes needed."
+          else
+            git commit -m "Add production live controls and alert center"
+            git push origin HEAD:main
+          fi
