@@ -1,0 +1,56 @@
+name: Optimize App Performance
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Optimize Streamlit dashboard caching
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path("src/dashboard.py")
+          text = path.read_text(encoding="utf-8")
+
+          marker = "# PERFORMANCE CACHE HELPERS"
+          if marker not in text:
+              anchor = 'SENSORS = {'
+              insert_at = text.index(anchor)
+              helpers = '''# ============================================================\n# PERFORMANCE CACHE HELPERS\n# ============================================================\n\n@st.cache_resource(show_spinner=False)\ndef _initialize_database_cached():\n    initialize_database()\n\n\n@st.cache_data(show_spinner=False)\ndef _read_csv_cached(file_path: str):\n    return pd.read_csv(file_path)\n\n\n@st.cache_data(show_spinner=False)\ndef _analyze_telemetry_cached(uploaded_bytes: bytes):\n    fd, temp_path = tempfile.mkstemp(suffix=".csv")\n    try:\n        with os.fdopen(fd, "wb") as temp_file:\n            temp_file.write(uploaded_bytes)\n        return analyze_telemetry(temp_path)\n    finally:\n        if os.path.exists(temp_path):\n            os.remove(temp_path)\n\n\n@st.cache_data(show_spinner=False)\ndef _analyze_risk_cached(frame):\n    return analyze_risk(frame)\n\n\n'''
+              text = text[:insert_at] + helpers + text[insert_at:]
+
+          text = text.replace("initialize_database()\n\n# ============================================================\n# AUTHENTICATION", "_initialize_database_cached()\n\n# ============================================================\n# AUTHENTICATION", 1)
+
+          text = text.replace("data = analyze_telemetry(\n                temp_path\n            )", "data = _analyze_telemetry_cached(uploaded_bytes)", 1)
+
+          text = text.replace("risk_data = analyze_risk(\n            data\n        )", "risk_data = _analyze_risk_cached(data)", 1)
+
+          text = text.replace("data = pd.read_csv(\n        file_path\n    )", "data = _read_csv_cached(str(file_path))", 1)
+          text = text.replace("risk_data = pd.read_csv(\n            risk_file\n        )", "risk_data = _read_csv_cached(str(risk_file))", 1)
+
+          path.write_text(text, encoding="utf-8")
+          print("Performance optimization applied.")
+
+      - name: Validate optimized dashboard
+        run: python -m compileall -q src/dashboard.py
+
+      - name: Commit optimization
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dashboard.py .github/workflows/optimize-performance.yml
+          if git diff --cached --quiet; then
+            echo "No optimization changes needed."
+          else
+            git commit -m "Optimize dashboard performance"
+            git push
+          fi
