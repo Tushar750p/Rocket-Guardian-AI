@@ -1,15 +1,23 @@
 import time
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 
+from src.phase_aware_v11 import build_phase_baseline, detect, load_training
+
+
+@lru_cache(maxsize=1)
+def _live_baseline():
+    return build_phase_baseline(load_training())
+
 
 def generate_live_telemetry(now: float | None = None, samples: int = 600) -> pd.DataFrame:
-    """Generate a live, rolling rocket telemetry stream for dashboard use.
+    """Generate a live rolling telemetry window for dashboard use.
 
-    This is a software simulator, not a physical sensor feed. The returned
-    window always ends at the current wall-clock time and includes a repeatable
-    anomaly event so the existing AI/risk pipeline can run continuously.
+    This is a software simulator, not a physical sensor feed. Replace this
+    generator later with a real sensor/API stream without changing the
+    dashboard's AI/risk presentation layer.
     """
     now = time.time() if now is None else float(now)
     dt = 0.25
@@ -43,8 +51,6 @@ def generate_live_telemetry(now: float | None = None, samples: int = 600) -> pd.
     rng = np.random.default_rng(int(now // 2))
     noise = rng.normal(0.0, 1.0, (samples, 4))
 
-    # Rolling anomaly window: vibration rises sharply, with smaller coupled
-    # pressure/thrust deviations to exercise the multi-sensor risk engine.
     event = ((time_s >= 90.0) & (time_s <= 108.0)).astype(float)
 
     pressure = p_base + 0.45 * noise[:, 0] - 7.5 * event
@@ -62,3 +68,8 @@ def generate_live_telemetry(now: float | None = None, samples: int = 600) -> pd.
             "thrust_n": thrust,
         }
     ).sort_values("time_s", ignore_index=True)
+
+
+def analyze_live_telemetry(now: float | None = None) -> pd.DataFrame:
+    """Generate and score the current live telemetry window."""
+    return detect(generate_live_telemetry(now=now), _live_baseline())
