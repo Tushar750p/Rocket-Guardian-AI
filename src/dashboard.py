@@ -17,6 +17,7 @@ if str(ROOT_DIR) not in sys.path:
 from src.telemetry_analysis import analyze_telemetry
 from src.live_telemetry import analyze_live_telemetry, score_live_frame
 from src.live_stream import load_live_telemetry
+from src.production_features import build_alerts, alerts_csv, excel_bytes
 from src.ai_agents import MissionAgent
 from src.risk_analysis import analyze_risk, summarize_risk
 from src.database import (
@@ -373,8 +374,29 @@ live_mode = analysis_mode == "Live Mission"
 
 if live_mode:
 
+    st.sidebar.subheader("Live Mission Controls")
+    live_running = st.session_state.get("live_mission_running", True)
+    control_cols = st.sidebar.columns(2)
+    with control_cols[0]:
+        if st.button("Start", use_container_width=True, key="live_start"):
+            st.session_state["live_mission_running"] = True
+            st.rerun()
+    with control_cols[1]:
+        if st.button("Stop", use_container_width=True, key="live_stop"):
+            st.session_state["live_mission_running"] = False
+            st.rerun()
+    live_running = st.session_state.get("live_mission_running", True)
+    if not live_running:
+        st.sidebar.warning("Live mission monitoring is stopped.")
+        st.info("Live monitoring stopped. Press Start in the sidebar to resume.")
+        st.stop()
+
     if live_source == "HTTP endpoint":
+        source_started_at = time.perf_counter()
         raw_live_data, live_source_status = load_live_telemetry(live_endpoint)
+        source_latency_ms = (time.perf_counter() - source_started_at) * 1000.0
+        st.sidebar.metric("Live Source Health", "ONLINE" if raw_live_data is not None else "OFFLINE")
+        st.sidebar.caption(f"Endpoint read latency: {source_latency_ms:.0f} ms")
         if raw_live_data is None:
             st.error(f"Live endpoint unavailable: {live_source_status}")
             st.info("Switch Live telemetry source to Simulator, or fix the endpoint.")
@@ -622,6 +644,37 @@ if live_mode:
         st.metric("Incident Agent", incident_state, f'{live_agents["incident"]["event_count"]} event(s)')
 
     st.info(live_agents["mission"]["recommendation"])
+
+    st.markdown("### Live Alert Center")
+    live_alerts = build_alerts(risk_data)
+    alert_count = int(len(live_alerts))
+    critical_count = int((live_alerts["Severity"] == "CRITICAL").sum()) if not live_alerts.empty else 0
+    alert_cols = st.columns(3)
+    with alert_cols[0]:
+        st.metric("Alert Events", alert_count)
+    with alert_cols[1]:
+        st.metric("Critical Events", critical_count)
+    with alert_cols[2]:
+        st.metric("Latest Risk", f'{float(risk_data["overall_risk"].iloc[-1]):.1f}/100')
+    if not live_alerts.empty:
+        st.dataframe(live_alerts.head(25), width="stretch", hide_index=True)
+        download_cols = st.columns(2)
+        with download_cols[0]:
+            st.download_button(
+                "Download Alert Log (CSV)",
+                data=alerts_csv(live_alerts),
+                file_name="rocket_guardian_live_alerts.csv",
+                mime="text/csv",
+                key="live_alert_csv",
+            )
+        with download_cols[1]:
+            st.download_button(
+                "Download Telemetry (Excel)",
+                data=excel_bytes(risk_data),
+                file_name="rocket_guardian_live_telemetry.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="live_telemetry_xlsx",
+            )
 
     latest_live = risk_data.iloc[-1]
     st.markdown("### Real-Time Stream Monitor")
@@ -933,7 +986,15 @@ if customer_mode:
                     "Saved At": str(row["run_created_at"] or row["mission_created_at"]),
                 })
             if history_items:
-                st.dataframe(pd.DataFrame(history_items), width="stretch", hide_index=True)
+                history_df = pd.DataFrame(history_items)
+                st.dataframe(history_df, width="stretch", hide_index=True)
+                st.download_button(
+                    "Download Mission History (CSV)",
+                    data=history_df.to_csv(index=False).encode("utf-8"),
+                    file_name="rocket_guardian_mission_history.csv",
+                    mime="text/csv",
+                    key="customer_history_csv",
+                )
             else:
                 st.info("No saved mission history yet.")
         else:
