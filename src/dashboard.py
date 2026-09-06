@@ -15,7 +15,9 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.telemetry_analysis import analyze_telemetry
-from src.live_telemetry import analyze_live_telemetry
+from src.live_telemetry import analyze_live_telemetry, score_live_frame
+from src.live_stream import load_live_telemetry
+from src.ai_agents import MissionAgent
 from src.risk_analysis import analyze_risk, summarize_risk
 from src.database import (
     create_customer,
@@ -302,8 +304,24 @@ elif analysis_mode == "Live Mission":
         interval=refresh_seconds * 1000,
         key="rocket_guardian_live_refresh",
     )
+    live_source = st.sidebar.selectbox(
+        "Live telemetry source",
+        ["Simulator", "HTTP endpoint"],
+    )
+
+    live_endpoint = ""
+    if live_source == "HTTP endpoint":
+        live_endpoint = st.sidebar.text_input(
+            "Telemetry endpoint URL",
+            value=os.getenv("ROCKET_GUARDIAN_LIVE_URL", ""),
+            placeholder="https://your-server.example/api/telemetry",
+        ).strip()
+        st.sidebar.caption("Endpoint must return JSON telemetry rows.")
+
     st.sidebar.success("LIVE telemetry stream active")
-    st.sidebar.caption("Software-simulated live telemetry")
+    st.sidebar.caption(
+        "Real HTTP stream" if live_source == "HTTP endpoint" else "Software simulator"
+    )
     selected = "Combined Failure"
     uploaded_file = None
 
@@ -355,8 +373,16 @@ live_mode = analysis_mode == "Live Mission"
 
 if live_mode:
 
-    live_tick = int(time.time())
-    data = _analyze_live_telemetry_cached(live_tick)
+    if live_source == "HTTP endpoint":
+        raw_live_data, live_source_status = load_live_telemetry(live_endpoint)
+        if raw_live_data is None:
+            st.error(f"Live endpoint unavailable: {live_source_status}")
+            st.info("Switch Live telemetry source to Simulator, or fix the endpoint.")
+            st.stop()
+        data = score_live_frame(raw_live_data)
+    else:
+        live_tick = int(time.time())
+        data = _analyze_live_telemetry_cached(live_tick)
 
 elif customer_mode:
 
@@ -574,6 +600,29 @@ else:
 if live_mode:
 
     risk_data = _analyze_risk_cached(data)
+    live_agents = MissionAgent.run(risk_data)
+
+    st.markdown("### Live AI Agent Console")
+    agent_cols = st.columns(3)
+    with agent_cols[0]:
+        st.metric(
+            "Anomaly Agent",
+            live_agents["anomaly"]["status"],
+            f"{live_agents["anomaly"]["detections"]} detections",
+        )
+    with agent_cols[1]:
+        st.metric(
+            "Sensor Agent",
+            live_agents["sensor"]["top_sensor"],
+            f"{live_agents["sensor"]["top_risk"]:.1f} risk",
+        )
+    with agent_cols[2]:
+        st.metric(
+            "Mission Agent",
+            live_agents["mission"]["mission_state"],
+            f"Peak {live_agents["mission"]["peak_time_s"]:.2f}s",
+        )
+    st.info(live_agents["mission"]["recommendation"])
 
 elif customer_mode:
 
