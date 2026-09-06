@@ -36,12 +36,19 @@ def _normalize(payload: Any) -> pd.DataFrame:
         raise ValueError("Live telemetry contains missing or invalid values.")
     if not frame["phase"].isin({"startup", "ramp", "steady", "shutdown"}).all():
         raise ValueError("Live telemetry contains an unsupported phase.")
+    if frame["time_s"].duplicated().any():
+        frame = frame.drop_duplicates(subset=["time_s"], keep="last")
 
     return frame[REQUIRED_COLUMNS].sort_values("time_s", ignore_index=True)
 
 
 def fetch_http_telemetry(url: str, timeout: float = 3.0) -> pd.DataFrame:
-    response = requests.get(url, timeout=timeout, headers={"Accept": "application/json"})
+    headers = {"Accept": "application/json"}
+    token = os.getenv("ROCKET_GUARDIAN_LIVE_API_KEY", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    response = requests.get(url, timeout=timeout, headers=headers)
     response.raise_for_status()
     return _normalize(response.json())
 
@@ -55,6 +62,7 @@ def load_live_telemetry(url: str | None = None) -> tuple[pd.DataFrame | None, st
     if not endpoint:
         return None, "simulator"
     try:
-        return fetch_http_telemetry(endpoint), "http"
+        frame = fetch_http_telemetry(endpoint)
+        return frame, "http"
     except (requests.RequestException, ValueError, json.JSONDecodeError) as exc:
         return None, f"http_error: {exc}"
