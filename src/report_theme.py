@@ -1,17 +1,10 @@
-"""Professional ReportLab theme for Rocket Guardian AI customer reports.
-
-The dashboard imports ReportLab after importing ``src.risk_analysis``.
-This module safely decorates the ReportLab classes/functions used by the
-customer report so the existing report-generation flow gets a more polished
-layout without changing the dashboard logic.
-"""
+"""Professional ReportLab theme for Rocket Guardian AI customer reports."""
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet as _original_get_styles
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    BaseDocTemplate as _BaseDocTemplate,
     Frame,
     PageTemplate,
     Paragraph as _OriginalParagraph,
@@ -29,7 +22,7 @@ _PALETTE = {
 
 
 class _ProfessionalDocTemplate(_OriginalSimpleDocTemplate):
-    """SimpleDocTemplate with a header, footer and document metadata."""
+    """SimpleDocTemplate with a branded header/footer."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -42,14 +35,21 @@ class _ProfessionalDocTemplate(_OriginalSimpleDocTemplate):
             canvas.saveState()
             width, height = document.pagesize
 
-            # Header rule and brand.
             canvas.setStrokeColor(_PALETTE["line"])
             canvas.setLineWidth(0.6)
-            canvas.line(document.leftMargin, height - 18 * mm,
-                        width - document.rightMargin, height - 18 * mm)
+            canvas.line(
+                document.leftMargin,
+                height - 18 * mm,
+                width - document.rightMargin,
+                height - 18 * mm,
+            )
             canvas.setFillColor(_PALETTE["navy"])
             canvas.setFont("Helvetica-Bold", 9)
-            canvas.drawString(document.leftMargin, height - 13 * mm, "ROCKET GUARDIAN AI")
+            canvas.drawString(
+                document.leftMargin,
+                height - 13 * mm,
+                "ROCKET GUARDIAN AI",
+            )
             canvas.setFillColor(_PALETTE["slate"])
             canvas.setFont("Helvetica", 8)
             canvas.drawRightString(
@@ -58,10 +58,13 @@ class _ProfessionalDocTemplate(_OriginalSimpleDocTemplate):
                 "TELEMETRY ANALYSIS REPORT",
             )
 
-            # Footer.
             canvas.setStrokeColor(_PALETTE["line"])
-            canvas.line(document.leftMargin, 17 * mm,
-                        width - document.rightMargin, 17 * mm)
+            canvas.line(
+                document.leftMargin,
+                17 * mm,
+                width - document.rightMargin,
+                17 * mm,
+            )
             canvas.setFillColor(_PALETTE["slate"])
             canvas.setFont("Helvetica", 7.5)
             canvas.drawString(
@@ -72,14 +75,21 @@ class _ProfessionalDocTemplate(_OriginalSimpleDocTemplate):
             canvas.drawRightString(
                 width - document.rightMargin,
                 11 * mm,
-                f"Page {doc_page_number(canvas)}",
+                f"Page {canvas.getPageNumber()}",
             )
             canvas.restoreState()
 
-        def doc_page_number(canvas):
-            return canvas.getPageNumber()
-
-        super().build(flowables, onFirstPage=draw_page, onLaterPages=draw_page, *args, **kwargs)
+        # The dashboard may supply its own page callbacks. Remove them so
+        # they cannot collide with the professional theme callback.
+        kwargs.pop("onFirstPage", None)
+        kwargs.pop("onLaterPages", None)
+        super().build(
+            flowables,
+            onFirstPage=draw_page,
+            onLaterPages=draw_page,
+            *args,
+            **kwargs,
+        )
 
 
 class _ProfessionalStyles:
@@ -160,8 +170,6 @@ def _professional_get_stylesheet():
     return _ProfessionalStyles()
 
 
-# Detect report content and assign a better style automatically while keeping
-# the dashboard's existing simple Paragraph calls unchanged.
 def _professional_paragraph(text, style=None, *args, **kwargs):
     raw = str(text).strip()
     styles = _ProfessionalStyles()
@@ -182,7 +190,7 @@ def _professional_paragraph(text, style=None, *args, **kwargs):
     return _OriginalParagraph(text, style, *args, **kwargs)
 
 
-# Patch the module attributes before dashboard imports them.
+# Patch the ReportLab module attributes before dashboard imports them.
 import reportlab.platypus as _platypus
 import reportlab.lib.styles as _styles_module
 
